@@ -1,0 +1,70 @@
+# Blender 4.0.2 MTL File: 'Casette_Model_01.blend'
+# www.blender.org
+
+newmtl Casette_4K.001
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 2
+map_Kd C:/lowPolyExploded1_Casette_4K_BaseColor.1001.png
+map_Ns C:/lowPolyExploded1_Casette_4K_Roughness.1001.png
+map_refl C:/lowPolyExploded1_Casette_4K_Metallic.1001.png
+map_Bump -bm 1.000000 C:/lowPolyExploded1_Casette_4K_Normal.1001.png
+
+newmtl Casette_4K_Film
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 2
+map_Kd C:/lowPolyExploded1_Casette_4K_BaseColor.1001.png
+map_Ns C:/lowPolyExploded1_Casette_4K_Roughness.1001.png
+map_refl C:/lowPolyExploded1_Casette_4K_Metallic.1001.png
+map_Bump -bm 1.500000 C:/lowPolyExploded1_Casette_4K_Normal.1001.png
+
+newmtl Casette_Plastic
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 2
+map_Kd C:/lowPolyExploded1_Casette_4K_BaseColor.1001.png
+map_Ns C:/lowPolyExploded1_Casette_4K_Roughness.1001.png
+map_refl C:/lowPolyExploded1_Casette_4K_Metallic.1001.png
+map_Bump -bm 1.000000 C:/lowPolyExploded1_Casette_4K_Normal.1001.png
+
+newmtl Casette_Plastic_v2
+Ka 1.000000 1.000000 1.000000
+Kd 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 2
+map_Ns C:/lowPolyExploded1_Casette_4K_Roughness.1001.png
+map_refl C:/lowPolyExploded1_Casette_4K_Metallic.1001.png
+map_Bump -bm 1.000000 C:/lowPolyExploded1_Casette_4K_Normal.1001.png
+
+newmtl Glass_Cassette_4K
+Ns 250.000000
+Ka 1.000000 1.000000 1.000000
+Kd 0.800000 0.800000 0.800000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.000000
+d 1.000000
+illum 2
+
+newmtl Temp_Material
+Ns 666.449585
+Ka 1.000000 1.000000 1.000000
+Kd 0.045954 0.045954 0.045954
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 2
