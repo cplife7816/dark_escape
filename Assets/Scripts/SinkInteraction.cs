@@ -55,12 +55,14 @@ public class SinkInteraction : MonoBehaviour, IItemSocket
         // 💥 여기서 드라이버 먼저 비활성화
         if (screwdriverItem != null)
         {
-            if (audioSource != null && breakSoundClip != null)
+            FirstPersonController fpc = FindObjectOfType<FirstPersonController>();
+            if (fpc != null)
             {
-                audioSource.PlayOneShot(breakSoundClip); // 부서지는 소리 먼저 재생
+                fpc.ReleaseHeldObjectIfMatch(screwdriverItem);
+                fpc.ResetHoldPosition(); // ✅ holdPosition 위치 복원
             }
 
-            screwdriverItem.SetActive(false); // 손에서 사라지게 만들기
+            Destroy(screwdriverItem); // 🔥 드라이버 파괴
         }
 
         // 2. 물 빠짐

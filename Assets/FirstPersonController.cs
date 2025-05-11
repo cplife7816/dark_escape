@@ -612,10 +612,15 @@ public class FirstPersonController : MonoBehaviour
                 if (heldObject.TryGetComponent(out PickupRotationOverride rotOverride))
                 {
                     heldObject.transform.localRotation = Quaternion.Euler(rotOverride.customEulerRotation);
+
+                    // 회전값 외 위치 보정
+                    if (rotOverride.offsetPosition != Vector3.zero)
+                    {
+                        holdPosition.localPosition += rotOverride.offsetPosition;
+                    }
                 }
                 else
                 {
-                    // 현재 회전을 유지하도록 worldRotation → localRotation 변환
                     heldObject.transform.localRotation = Quaternion.Inverse(holdPosition.rotation) * heldObject.transform.rotation;
                 }
 
@@ -623,10 +628,6 @@ public class FirstPersonController : MonoBehaviour
             }
         }
     }
-
-
-
-
 
 
     private void DropItem()
@@ -656,6 +657,7 @@ public class FirstPersonController : MonoBehaviour
 
             heldObject = null;
             isHoldingItem = false;
+            holdPosition.localPosition = new Vector3(0f, 0f, 1.2f);
         }
     }
 
@@ -680,14 +682,13 @@ public class FirstPersonController : MonoBehaviour
             }
             else if (tag == "Door")
             {
-                var door = hit.collider.GetComponent<Door>();
-                if (door != null && door.isLocked)
+                if (hit.collider.TryGetComponent(out Door door))
                 {
-                    newIcon = lockIcon;
+                    newIcon = door.isLocked ? lockIcon : doorIcon;
                 }
-                else
+                else if (hit.collider.TryGetComponent(out WindowInteraction window))
                 {
-                    newIcon = doorIcon;
+                    newIcon = window.isLocked ? lockIcon : doorIcon;
                 }
             }
         }
@@ -732,4 +733,18 @@ public class FirstPersonController : MonoBehaviour
         }
     }
 
+
+    public void ReleaseHeldObjectIfMatch(GameObject target)
+    {
+        if (heldObject == target)
+        {
+            heldObject = null;
+            isHoldingItem = false;
+        }
+    }
+
+    public void ResetHoldPosition()
+    {
+        holdPosition.localPosition = new Vector3(0f, 0f, 1.2f);
+    }
 }

@@ -6,7 +6,7 @@ public class EdgeDetectionEffect : MonoBehaviour
     public Shader edgeDetectShader;
     private Material edgeDetectMaterial;
 
-    [Range(0, 5)]
+    [Range(0, 20)]
     public float edgeThreshold = 0.1f; // ¿§Áö °¨Áö ¹Î°¨µµ
 
     void Start()
