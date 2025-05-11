@@ -11,8 +11,10 @@ public class SinkInteraction : MonoBehaviour, IItemSocket
     public AudioSource audioSource;
     public AudioClip screwSoundClip;
     public AudioClip waterDrainClip;
+    public AudioClip breakSoundClip; // 💥 부서지는 소리
 
     private bool isUsed = false;
+    private GameObject screwdriverItem;
 
     public bool TryInteract(GameObject item)
     {
@@ -20,16 +22,17 @@ public class SinkInteraction : MonoBehaviour, IItemSocket
             return false;
 
         isUsed = true;
-        StartCoroutine(UnscrewAndDrain());
-        return false; // 들고 있도록 유지
+        screwdriverItem = item;
+        StartCoroutine(UnscrewAndDrainAndDestroy());
+        return false; // ✅ 드라이버 유지!
     }
 
-    private IEnumerator UnscrewAndDrain()
+    private IEnumerator UnscrewAndDrainAndDestroy()
     {
         float unscrewDuration = 2f;
         float drainDuration = 2f;
 
-        // 나사 회전
+        // 1. 나사 회전
         float elapsed = 0f;
         Vector3 originalRot = screw.localEulerAngles;
         Vector3 targetRot = originalRot + new Vector3(0, 0, 360);
@@ -49,7 +52,18 @@ public class SinkInteraction : MonoBehaviour, IItemSocket
         }
         screw.localEulerAngles = targetRot;
 
-        // 물 빠짐
+        // 💥 여기서 드라이버 먼저 비활성화
+        if (screwdriverItem != null)
+        {
+            if (audioSource != null && breakSoundClip != null)
+            {
+                audioSource.PlayOneShot(breakSoundClip); // 부서지는 소리 먼저 재생
+            }
+
+            screwdriverItem.SetActive(false); // 손에서 사라지게 만들기
+        }
+
+        // 2. 물 빠짐
         elapsed = 0f;
         Vector3 originalPos = water.position;
         Vector3 targetPos = new Vector3(originalPos.x, end.position.y, originalPos.z);
@@ -74,8 +88,6 @@ public class SinkInteraction : MonoBehaviour, IItemSocket
 
         water.position = targetPos;
         water.localScale = targetScale;
-
-
         water.gameObject.SetActive(false);
     }
 }

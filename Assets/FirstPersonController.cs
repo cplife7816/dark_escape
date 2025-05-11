@@ -379,18 +379,18 @@ public class FirstPersonController : MonoBehaviour
                 if (socket != null)
                 {
                     Debug.Log("[Interaction] IItemSocket 상호작용 시도");
+
                     bool shouldDrop = socket.TryInteract(heldObject);
+
+                    Debug.Log($"[Interaction] TryInteract 결과: {(shouldDrop ? "드롭 필요" : "유지")}");
+
+                    // ⛔ 무조건 DropItem() 실행하는 것이 문제 → 조건 분기
                     if (shouldDrop)
                     {
                         DropItem();
                     }
-                    else
-                    {
-                        heldObject = null;
-                        isHoldingItem = false;
-                    }
 
-                    interactionHandled = true;
+                    interactionHandled = true; // ✅ 무조건 처리로 간주
                 }
             }
 
@@ -438,10 +438,6 @@ public class FirstPersonController : MonoBehaviour
             heldObject.transform.position = holdPosition.position;
         }
     }
-
-
-
-
 
     /*
 

@@ -3461,6 +3461,7 @@ MonoBehaviour:
   audioSource: {fileID: 772187849}
   screwSoundClip: {fileID: 8300000, guid: ae3042252990c3445b4c4d208923b51a, type: 3}
   waterDrainClip: {fileID: 8300000, guid: 52fad1b1ea2910f47a021f6e3b3f1e63, type: 3}
+  breakSoundClip: {fileID: 8300000, guid: 746debc671ad4494c8a5136ec8f6f2da, type: 3}
 --- !u!65 &772187854
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -4952,7 +4953,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!108 &1567995481
 Light:
   m_ObjectHideFlags: 0
