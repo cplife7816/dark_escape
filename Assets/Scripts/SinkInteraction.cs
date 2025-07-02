@@ -19,10 +19,11 @@ public class SinkInteraction : MonoBehaviour, IItemSocket
     public Light pointLight;
     public float lightIntensity = 3f;
     public float lightRange = 5f;
-    public float lightDuration = 2f;
+    public float lightFadeTime = 1f;
 
     private bool isUsed = false;
     private GameObject screwdriverItem;
+    private Coroutine lightCoroutine;
 
     public bool TryInteract(GameObject item)
     {
@@ -31,66 +32,69 @@ public class SinkInteraction : MonoBehaviour, IItemSocket
 
         isUsed = true;
         screwdriverItem = item;
-        screw.tag = "Untagged"; // 나사 줍기 방지
+        screw.tag = "Untagged";
 
         FirstPersonController fpc = FindObjectOfType<FirstPersonController>();
-        if (fpc != null)
+        if (fpc != null && breakSoundClip != null)
         {
-            fpc.CanMove = false;
+            float totalDuration = 2f + breakSoundClip.length;
+            fpc.PauseMovementFor(totalDuration);
         }
 
-        StartCoroutine(UnscrewSequence(fpc));
+        StartCoroutine(UnscrewSequence());
         return false;
     }
 
-    private IEnumerator UnscrewSequence(FirstPersonController fpc)
+    private IEnumerator UnscrewSequence()
     {
         float unscrewDuration = 2f;
         float drainDuration = 2f;
 
-        // 회전 준비
+        FirstPersonController fpc = FindObjectOfType<FirstPersonController>();
+
+        // ✅ 빛 점점 켜짐
+        StartLightFadeIn();
+
+        // 🔊 나사 회전 + 사운드
         Quaternion driverStartRot = screwdriverItem.transform.localRotation;
         Quaternion driverEndRot = driverStartRot * Quaternion.Euler(0f, 0f, 360f);
-        Quaternion screwStartRot = screw.localRotation;
-        Quaternion screwEndRot = screwStartRot * Quaternion.Euler(0f, 0f, 360f);
+        Vector3 screwStartEuler = screw.localEulerAngles;
+        Vector3 screwEndEuler = screwStartEuler + new Vector3(0f, 0f, 360f);
 
         if (audioSource && screwSoundClip)
-        {
             audioSource.PlayOneShot(screwSoundClip);
-            StartCoroutine(PlayLightEffect(lightDuration)); // 🔆 빛 효과 시작
-        }
 
         float elapsed = 0f;
         while (elapsed < unscrewDuration)
         {
             float t = elapsed / unscrewDuration;
-            screw.localRotation = Quaternion.Slerp(screwStartRot, screwEndRot, t);
+            screw.localEulerAngles = Vector3.Lerp(screwStartEuler, screwEndEuler, t);
             screwdriverItem.transform.localRotation = Quaternion.Slerp(driverStartRot, driverEndRot, t);
             elapsed += Time.deltaTime;
             yield return null;
         }
 
-        screw.localRotation = screwEndRot;
+        screw.localEulerAngles = screwEndEuler;
         screwdriverItem.transform.localRotation = driverStartRot;
 
-        if (audioSource && breakSoundClip)
-        {
-            audioSource.PlayOneShot(breakSoundClip);
-            StartCoroutine(PlayLightEffect(breakSoundClip.length)); // 🔆 다시 빛 효과
-        }
+        screw.tag = "Untagged";
+        if (screw.TryGetComponent<Collider>(out var col)) col.enabled = false;
 
-        yield return new WaitForSeconds(breakSoundClip.length);
+        // 💥 파열음 + 드라이버 제거
+        if (audioSource && breakSoundClip)
+            audioSource.PlayOneShot(breakSoundClip);
 
         if (fpc != null)
         {
             fpc.ReleaseHeldObjectIfMatch(screwdriverItem);
             fpc.ResetHoldPosition();
-            fpc.CanMove = true;
         }
-
         Destroy(screwdriverItem);
 
-        // 물 빠짐
+        yield return new WaitForSeconds(breakSoundClip.length);
+        yield return new WaitForSeconds(2f); // 관찰 시간
+
+        // 💧 물 빠짐
         elapsed = 0f;
         Vector3 wpStart = water.position;
         Vector3 wpEnd = new Vector3(wpStart.x, end.position.y, wpStart.z);
@@ -98,9 +102,7 @@ public class SinkInteraction : MonoBehaviour, IItemSocket
         Vector3 wsEnd = wsStart * 0.5f;
 
         if (audioSource && waterDrainClip)
-        {
             audioSource.PlayOneShot(waterDrainClip);
-        }
 
         while (elapsed < drainDuration)
         {
@@ -114,42 +116,43 @@ public class SinkInteraction : MonoBehaviour, IItemSocket
         water.position = wpEnd;
         water.localScale = wsEnd;
         water.gameObject.SetActive(false);
+
+        // ✅ 물 빠짐 끝나고 빛 서서히 꺼짐
+        StartLightFadeOut();
     }
 
-    private IEnumerator PlayLightEffect(float duration)
+    private void StartLightFadeIn()
     {
-        if (pointLight == null)
-            yield break;
+        if (pointLight == null) return;
+        if (lightCoroutine != null) StopCoroutine(lightCoroutine);
+        lightCoroutine = StartCoroutine(FadeLight(0f, lightIntensity, 0f, lightRange, lightFadeTime));
+    }
 
+    private void StartLightFadeOut()
+    {
+        if (pointLight == null) return;
+        if (lightCoroutine != null) StopCoroutine(lightCoroutine);
+        lightCoroutine = StartCoroutine(FadeLight(lightIntensity, 0f, lightRange, 0f, lightFadeTime));
+    }
+
+    private IEnumerator FadeLight(float fromIntensity, float toIntensity, float fromRange, float toRange, float duration)
+    {
         float elapsed = 0f;
         pointLight.enabled = true;
 
         while (elapsed < duration)
         {
             float t = elapsed / duration;
-            pointLight.intensity = Mathf.Lerp(0f, lightIntensity, t);
-            pointLight.range = Mathf.Lerp(0f, lightRange, t);
+            pointLight.intensity = Mathf.Lerp(fromIntensity, toIntensity, t);
+            pointLight.range = Mathf.Lerp(fromRange, toRange, t);
             elapsed += Time.deltaTime;
             yield return null;
         }
 
-        // 부드럽게 사라짐
-        elapsed = 0f;
-        float fadeTime = 0.5f;
-        float startIntensity = pointLight.intensity;
-        float startRange = pointLight.range;
+        pointLight.intensity = toIntensity;
+        pointLight.range = toRange;
 
-        while (elapsed < fadeTime)
-        {
-            float t = elapsed / fadeTime;
-            pointLight.intensity = Mathf.Lerp(startIntensity, 0f, t);
-            pointLight.range = Mathf.Lerp(startRange, 0f, t);
-            elapsed += Time.deltaTime;
-            yield return null;
-        }
-
-        pointLight.intensity = 0f;
-        pointLight.range = 0f;
-        pointLight.enabled = false;
+        if (toIntensity == 0f && toRange == 0f)
+            pointLight.enabled = false;
     }
 }

@@ -646,4 +646,17 @@ public class FirstPersonController : MonoBehaviour
 
         subtitleTextUI.text = ""; // 오브젝트를 바라보지 않으면 자막 비우기
     }
+
+    public void PauseMovementFor(float duration)
+    {
+        StartCoroutine(PauseMovementCoroutine(duration));
+    }
+
+    private IEnumerator PauseMovementCoroutine(float duration)
+    {
+        CanMove = false;
+        yield return new WaitForSeconds(duration);
+        CanMove = true;
+    }
+
 }
