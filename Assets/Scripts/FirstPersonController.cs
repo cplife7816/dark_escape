@@ -533,6 +533,11 @@ public class FirstPersonController : MonoBehaviour
                 scaleOverride.ApplyDroppedScale();
             }
 
+            if (heldObject.TryGetComponent(out GlassBreakController glassBreak))
+            {
+                glassBreak.NotifyDroppedByPlayer();
+            }
+
             // ✅ 레이어 복구
             heldObject.layer = LayerMask.NameToLayer("Default");
 
