@@ -118,6 +118,11 @@ public class FirstPersonController : MonoBehaviour
 
     [SerializeField] private TextMeshProUGUI subtitleTextUI;
 
+    private float defaultHoldZ = 1.2f;      // 손의 기본 거리
+    private float minHoldZ = 0.25f;          // 벽과 너무 가까울 때 최소 거리
+    private float holdAdjustSpeed = 10f;    // 보간 속도
+    private float heldObjectHoldZ = 1.2f;  // 아이템에 지정된 hold_position.z 값 (없으면 기본값)
+
     void Awake()
     {
         playerCamera = GetComponentInChildren<Camera>();
@@ -145,7 +150,8 @@ public class FirstPersonController : MonoBehaviour
 
             HandleInteraction();
             HandleInteractionIcon();
-            UpdateSubtitleText(); // ✅ 여기 추가!
+            UpdateSubtitleText();
+            AdjustHoldPosition(); 
         }
     }
 
@@ -479,25 +485,50 @@ public class FirstPersonController : MonoBehaviour
                 heldObject.transform.SetParent(holdPosition);
                 heldObject.transform.localPosition = Vector3.zero;
 
-                if (heldObject.TryGetComponent(out PickupScaleOverride scaleOverride))
+                if (heldObject.TryGetComponent(out PickupOverride overrideData))
                 {
-                    scaleOverride.ApplyHeldScale(); // 원래 크기로 복원
-                }
+                    // 회전 적용
+                    Quaternion itemRotation;
 
-                // ✅ 회전 유지: PickupRotationOverride가 있으면 오버라이드, 없으면 현재 회전 유지
-                if (heldObject.TryGetComponent(out PickupRotationOverride rotOverride))
-                {
-                    heldObject.transform.localRotation = Quaternion.Euler(rotOverride.customEulerRotation);
-
-                    // 회전값 외 위치 보정
-                    if (rotOverride.offsetPosition != Vector3.zero)
+                    if (overrideData.customEulerRotation == Vector3.zero)
                     {
-                        holdPosition.localPosition += rotOverride.offsetPosition;
+                        // ✅ 회전 오버라이드가 없으면 현재 rotation 유지
+                        itemRotation = Quaternion.Inverse(holdPosition.rotation) * heldObject.transform.rotation;
+                        Debug.Log($"[Pickup] 회전 유지: {heldObject.transform.rotation.eulerAngles}");
                     }
+                    else
+                    {
+                        // ✅ 오버라이드 회전이 존재하면 적용
+                        itemRotation = Quaternion.Euler(overrideData.customEulerRotation);
+                        Debug.Log($"[Pickup] 회전 오버라이드 적용: {overrideData.customEulerRotation}");
+                    }
+
+                    // 최종 적용
+                    heldObject.transform.localRotation = itemRotation;
+
+                    // 위치 적용
+                    Vector3 offset = overrideData.holdOffset;
+                    holdPosition.localPosition = new Vector3(offset.x, offset.y, offset.z != 0f ? offset.z : 1.2f);
+                    heldObjectHoldZ = offset.z != 0f ? offset.z : 1.2f;
+
+                    // 스케일 적용
+                    overrideData.ApplyHeldScale();
                 }
                 else
                 {
-                    heldObject.transform.localRotation = Quaternion.Inverse(holdPosition.rotation) * heldObject.transform.rotation;
+                    heldObjectHoldZ = 1.2f;
+                    holdPosition.localPosition = new Vector3(0f, 0f, heldObjectHoldZ);
+                }
+
+
+
+                if (heldObject.TryGetComponent(out PickupHoldOverride holdOverride))
+                {
+                    holdPosition.localPosition = holdOverride.GetOffset();
+                }
+                else
+                {
+                    holdPosition.localPosition = new Vector3(0f, 0f, 1.2f); // 기본값
                 }
 
                 isHoldingItem = true;
@@ -512,8 +543,8 @@ public class FirstPersonController : MonoBehaviour
         {
             heldObject.transform.parent = null;
 
-            // 드롭 위치
-            heldObject.transform.position = playerCamera.transform.position + playerCamera.transform.forward * 1f;
+            // ✅ 실제 드롭 위치를 '현재 holdPosition 위치 기준'으로 설정
+            heldObject.transform.position = holdPosition.position;
 
             // Rigidbody 복구
             if (heldObject.TryGetComponent(out Rigidbody rb))
@@ -528,19 +559,31 @@ public class FirstPersonController : MonoBehaviour
                 col.enabled = true;
             }
 
-            if (heldObject.TryGetComponent(out PickupScaleOverride scaleOverride))
+            if (heldObject.TryGetComponent(out PickupOverride overrideData))
             {
-                scaleOverride.ApplyDroppedScale();
+                overrideData.ApplyDroppedScale();
             }
 
             // ✅ 레이어 복구
             heldObject.layer = LayerMask.NameToLayer("Default");
 
+            // ✅ 새로 추가: 드롭 이벤트 인터페이스 호출
+            if (heldObject.TryGetComponent(out IDroppable droppable))
+            {
+                droppable.Dropped();
+            }
+
             heldObject = null;
             isHoldingItem = false;
-            holdPosition.localPosition = new Vector3(0f, 0f, 1.2f);
+
+            // ✅ Drop 이후에 HoldPosition 복원
+            Debug.Log($"[DropItem] holdPosition 복원 위치 z = {heldObjectHoldZ} (object drop)");
+            holdPosition.localPosition = new Vector3(0f, 0f, heldObjectHoldZ);
+
         }
     }
+
+
 
     private void HandleInteractionIcon()
     {
@@ -626,7 +669,8 @@ public class FirstPersonController : MonoBehaviour
 
     public void ResetHoldPosition()
     {
-        holdPosition.localPosition = new Vector3(0f, 0f, 1f);
+        Debug.Log($"[ResetHoldPosition] holdPosition 복원 위치 z = {heldObjectHoldZ}");
+        holdPosition.localPosition = new Vector3(0f, 0f, heldObjectHoldZ);
     }
 
     private void UpdateSubtitleText()
@@ -657,6 +701,44 @@ public class FirstPersonController : MonoBehaviour
         CanMove = false;
         yield return new WaitForSeconds(duration);
         CanMove = true;
+    }
+
+    private void AdjustHoldPosition()
+    {
+        if (!isHoldingItem || holdPosition == null || heldObject == null) return;
+
+        float defaultZ = heldObjectHoldZ;
+        float minZ = 0.3f;
+        float targetZ = defaultZ;
+
+        Vector3 boxHalfExtents;
+
+        // ✅ Renderer가 없을 경우를 대비한 안전한 처리
+        Renderer rend = heldObject.GetComponentInChildren<Renderer>();
+        if (rend != null)
+        {
+            boxHalfExtents = rend.bounds.extents;
+        }
+        else
+        {
+            // fallback 값 (대충 가로/세로 0.15, 깊이 0.25로 가정)
+            boxHalfExtents = new Vector3(0.15f, 0.15f, 0.25f);
+            Debug.LogWarning($"[AdjustHoldPosition] Renderer 없음 → 기본 박스 크기 사용 (object: {heldObject.name})");
+        }
+
+        Vector3 origin = playerCamera.transform.position;
+        Vector3 dir = playerCamera.transform.forward;
+        float checkDistance = defaultZ + 0.05f;
+
+        if (Physics.BoxCast(origin, boxHalfExtents, dir, out RaycastHit hit, playerCamera.transform.rotation, checkDistance, ~LayerMask.GetMask("IgnorePlayerRay")))
+        {
+            float distance = hit.distance;
+            targetZ = Mathf.Clamp(distance - 0.05f, minZ, defaultZ);
+        }
+
+        Vector3 current = holdPosition.localPosition;
+        float newZ = Mathf.Lerp(current.z, targetZ, Time.deltaTime * holdAdjustSpeed);
+        holdPosition.localPosition = new Vector3(current.x, current.y, newZ);
     }
 
 }

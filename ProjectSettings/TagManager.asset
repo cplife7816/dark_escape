@@ -10,6 +10,7 @@ TagManager:
   - Cassette_Player
   - Driver
   - Interact
+  - FOOTSTEPS/ROCK
   layers:
   - Default
   - TransparentFX

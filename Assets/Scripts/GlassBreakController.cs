@@ -1,0 +1,248 @@
+﻿using UnityEngine;
+using System.Collections;
+using System.Collections.Generic;
+
+[RequireComponent(typeof(Rigidbody))]
+public class GlassBreakController : MonoBehaviour, IDroppable
+{
+    [SerializeField] private float pulseUpRatio = 0.1f;
+    [SerializeField] private float pulseHoldRatio = 0.5f;
+    [SerializeField] private float pulseDownRatio = 0.4f;
+    [SerializeField] private string subtitleName = "bottle";
+
+    [Header("Glass References")]
+    [SerializeField] private GameObject intactGlass;
+    [SerializeField] private GameObject shatteredGlass;
+
+    [Header("Sound Settings")]
+    [SerializeField] private AudioSource audioSource;
+    [SerializeField] private AudioClip breakSound;
+
+    [Header("Material Settings")]
+    [SerializeField] private string targetMaterialName = "bottle";
+    [SerializeField] private Color targetColor = Color.red;
+    [SerializeField] private float colorChangeDuration = 3f;
+
+    [Header("Light Pulse")]
+    [SerializeField] private Light pointLight;
+    [SerializeField] private float lightRange = 5f;
+    [SerializeField] private float lightIntensity = 7f;
+    [SerializeField] private float lightDuration = 0.5f;
+
+    [Header("Ground Sensor")]
+    [SerializeField] private GameObject groundSensorObject;
+
+    private static bool colorChangedOnce = false;
+    private Rigidbody rb;
+    private bool isBroken = false;
+    private BoxCollider mainCollider;
+
+    private void Start()
+    {
+        rb = GetComponent<Rigidbody>();
+        mainCollider = GetComponent<BoxCollider>();
+
+        if (rb != null && CompareTag("Item"))
+            rb.isKinematic = true;
+
+        if (pointLight != null)
+        {
+            pointLight.range = 0f;
+            pointLight.intensity = 0f;
+        }
+
+        if (groundSensorObject != null)
+        {
+            groundSensorObject.SetActive(false); // ⛔ 처음엔 꺼둠
+
+            var sensorScript = groundSensorObject.AddComponent<GlassGroundSensor>();
+            sensorScript.Initialize(this);
+        }
+    }
+
+    public void Dropped()
+    {
+        if (rb != null)
+        {
+            rb.isKinematic = false;
+            rb.useGravity = true;
+        }
+
+        if (mainCollider != null)
+            mainCollider.enabled = true;
+
+        if (groundSensorObject != null)
+            groundSensorObject.SetActive(true); // ✅ 드롭할 때 켜기
+    }
+
+    private void OnTransformParentChanged()
+    {
+        if (transform.parent != null && transform.parent.name == "HoldPosition")
+        {
+            if (mainCollider != null)
+                mainCollider.enabled = false;
+        }
+    }
+
+    public void OnGroundSensorTriggered(Collider other)
+    {
+        if (isBroken) return;
+        isBroken = true;
+        StartCoroutine(DelayedBreak());
+    }
+
+    private IEnumerator DelayedBreak()
+    {
+        yield return null;
+        BreakGlass();
+        TriggerLight();
+        PlayBreakSound();
+
+        float duration = colorChangedOnce ? 0.5f : colorChangeDuration;
+        StartCoroutine(ChangeWhiteMaterialsOnly(duration));
+        StartCoroutine(DisableCollisionsAfterBreak());
+
+        colorChangedOnce = true;
+        ApplyNameToMatchingObjects();
+    }
+
+    private void BreakGlass()
+    {
+        if (intactGlass != null)
+            intactGlass.SetActive(false);
+        if (shatteredGlass != null)
+            shatteredGlass.SetActive(true);
+
+        if (groundSensorObject != null)
+            groundSensorObject.SetActive(false); // ✅ 더 이상 감지하지 않도록
+    }
+
+    private void TriggerLight()
+    {
+        if (pointLight == null) return;
+
+        pointLight.enabled = true;
+
+        if (LightPulseController.Instance != null)
+        {
+            LightPulseController.Instance.TriggerPulse(pointLight, lightRange, lightIntensity, lightDuration, this);
+        }
+    }
+
+    private void PlayBreakSound()
+    {
+        if (audioSource != null && breakSound != null)
+        {
+            audioSource.PlayOneShot(breakSound);
+        }
+    }
+
+    private IEnumerator ChangeWhiteMaterialsOnly(float duration)
+    {
+        List<Material> targets = new List<Material>();
+        Renderer[] renderers = FindObjectsOfType<Renderer>();
+
+        foreach (Renderer r in renderers)
+        {
+            foreach (Material mat in r.materials)
+            {
+                if (mat.name.StartsWith(targetMaterialName) && IsExactlyWhite(mat.color))
+                    targets.Add(mat);
+            }
+        }
+
+        if (shatteredGlass != null)
+        {
+            Renderer[] hidden = shatteredGlass.GetComponentsInChildren<Renderer>(true);
+            foreach (Renderer r in hidden)
+            {
+                foreach (Material mat in r.materials)
+                {
+                    if (mat.name.StartsWith(targetMaterialName) && IsExactlyWhite(mat.color) && !targets.Contains(mat))
+                        targets.Add(mat);
+                }
+            }
+        }
+
+        if (targets.Count == 0) yield break;
+
+        float elapsed = 0f;
+        Dictionary<Material, Color> origin = new();
+        foreach (var mat in targets) origin[mat] = mat.color;
+
+        while (elapsed < duration)
+        {
+            float t = elapsed / duration;
+            foreach (var mat in targets)
+                mat.color = Color.Lerp(origin[mat], targetColor, t);
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+
+        foreach (var mat in targets)
+            mat.color = targetColor;
+    }
+
+    private bool IsExactlyWhite(Color c)
+    {
+        return Mathf.Approximately(c.r, 1f) &&
+               Mathf.Approximately(c.g, 1f) &&
+               Mathf.Approximately(c.b, 1f);
+    }
+
+    private IEnumerator DisableCollisionsAfterBreak()
+    {
+        yield return new WaitForSeconds(3f);
+
+        if (shatteredGlass != null)
+        {
+            Collider[] colliders = shatteredGlass.GetComponentsInChildren<Collider>(true);
+            foreach (var col in colliders)
+                col.enabled = false;
+
+            Rigidbody[] rigidbodies = shatteredGlass.GetComponentsInChildren<Rigidbody>(true);
+            foreach (var r in rigidbodies)
+                r.isKinematic = true;
+        }
+
+        if (mainCollider != null)
+            mainCollider.enabled = false;
+
+        if (rb != null)
+            rb.isKinematic = true;
+    }
+
+    private void ApplyNameToMatchingObjects()
+    {
+        string newName = subtitleName;
+        if (string.IsNullOrEmpty(newName) || newName == "???") return;
+
+        Renderer thisRenderer = GetComponentInChildren<Renderer>(true);
+        if (thisRenderer == null || thisRenderer.sharedMaterial == null) return;
+
+        string targetMaterialBaseName = thisRenderer.sharedMaterial.name.Replace(" (Instance)", "");
+
+        GlassBreakController[] allGlass = FindObjectsOfType<GlassBreakController>();
+        foreach (var glass in allGlass)
+        {
+            Renderer otherRenderer = glass.GetComponentInChildren<Renderer>(true);
+            if (otherRenderer == null || otherRenderer.sharedMaterial == null) continue;
+
+            string otherMatName = otherRenderer.sharedMaterial.name.Replace(" (Instance)", "");
+
+            if (otherMatName == targetMaterialBaseName)
+            {
+                glass.gameObject.name = newName;
+
+                SubtitleObject subtitle = glass.GetComponent<SubtitleObject>();
+                if (subtitle != null)
+                {
+                    var subtitleField = typeof(SubtitleObject)
+                        .GetField("subtitleText", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                    if (subtitleField != null)
+                        subtitleField.SetValue(subtitle, newName);
+                }
+            }
+        }
+    }
+}
