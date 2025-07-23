@@ -115,6 +115,7 @@ public class GlassBreakController : MonoBehaviour, IDroppable
 
         if (groundSensorObject != null)
             groundSensorObject.SetActive(false); // ✅ 더 이상 감지하지 않도록
+        ApplyEffectToPlayer();
     }
 
     private void TriggerLight()
@@ -245,4 +246,13 @@ public class GlassBreakController : MonoBehaviour, IDroppable
             }
         }
     }
+
+    private void ApplyEffectToPlayer()
+    {
+        FirstPersonController player = FindObjectOfType<FirstPersonController>();
+        if (player == null) return;
+
+        player.ApplyGlassEffect(targetMaterialName); // 추출 없이 그대로 전달
+    }
+
 }

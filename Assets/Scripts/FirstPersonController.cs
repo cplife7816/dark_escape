@@ -85,6 +85,28 @@ public class FirstPersonController : MonoBehaviour
     [SerializeField] private KeyCode interactKey = KeyCode.E;
     [SerializeField] private float interactionDistance = 2.5f;
 
+    [Header("Glass Effects Settings")]
+    [SerializeField] private float redDuration = 5f;
+
+    [SerializeField] private float blueDuration = 5f;
+    [SerializeField] private float blueRangeBonus = 3f;
+
+    [SerializeField] private float greenDuration = 5f;
+    [SerializeField] private float speedPenalty = 3f;
+
+    [SerializeField] private float yellowDuration = 5f;
+    [SerializeField] private float yellowRangePenalty = 6f;
+
+    [SerializeField] private float pinkDuration = 5f;
+
+    [Header("Glass Effect Audio")]
+    [SerializeField] private AudioSource glassEffectAudioSource;
+
+    [SerializeField] private AudioClip yellowEffectClip;
+    [SerializeField] private AudioClip pinkEffectClip;
+
+    private bool isLightLocked = false; // 💡 분홍 병 효과 중인지 여부
+
     public float extraRange = 0f;
 
     private Coroutine lightCoroutine; 
@@ -121,7 +143,9 @@ public class FirstPersonController : MonoBehaviour
     private float defaultHoldZ = 1.2f;      // 손의 기본 거리
     private float minHoldZ = 0.25f;          // 벽과 너무 가까울 때 최소 거리
     private float holdAdjustSpeed = 10f;    // 보간 속도
-    private float heldObjectHoldZ = 1.2f;  // 아이템에 지정된 hold_position.z 값 (없으면 기본값)
+    private float heldObjectHoldX = 0f;
+    private float heldObjectHoldY = 0f;
+    private float heldObjectHoldZ = 1.2f; // 기본 거리
 
     void Awake()
     {
@@ -298,6 +322,7 @@ public class FirstPersonController : MonoBehaviour
     private IEnumerator PulseLightEffect(float duration, float extraRange, float intensity, Light point)
     {
         if (point == null) yield break;
+        if (isLightLocked) yield break;
 
         float halfDuration = duration / 2f;
         float timer = 0f;
@@ -451,7 +476,7 @@ public class FirstPersonController : MonoBehaviour
     private void TryPickupItem()
     {
         RaycastHit hit;
-        int mask = ~LayerMask.GetMask("IgnorePlayerRay"); // ScrewDriver 등을 무시
+        int mask = ~LayerMask.GetMask("IgnorePlayerRay");
         if (Physics.Raycast(playerCamera.transform.position, playerCamera.transform.forward, out hit, interactionDistance, mask))
         {
             GameObject target = hit.collider.gameObject;
@@ -460,13 +485,11 @@ public class FirstPersonController : MonoBehaviour
             {
                 heldObject = target;
 
-                // ✅ ScrewDriver와 Cassette는 Ray 무시 레이어로 지정
                 if (heldObject.name == "ScrewDriver" || heldObject.CompareTag("Cassette"))
                 {
                     heldObject.layer = LayerMask.NameToLayer("IgnorePlayerRay");
                 }
 
-                // Rigidbody 설정
                 Rigidbody rb = heldObject.GetComponent<Rigidbody>();
                 if (rb != null)
                 {
@@ -474,67 +497,51 @@ public class FirstPersonController : MonoBehaviour
                     rb.useGravity = false;
                 }
 
-                // Collider 비활성화
                 Collider col = heldObject.GetComponent<Collider>();
                 if (col != null)
                 {
                     col.enabled = false;
                 }
 
-                // 부모 설정
                 heldObject.transform.SetParent(holdPosition);
-                heldObject.transform.localPosition = Vector3.zero;
 
+                // ✅ 회전 + 위치 보정 + 스케일 통합 처리
                 if (heldObject.TryGetComponent(out PickupOverride overrideData))
                 {
-                    // 회전 적용
-                    Quaternion itemRotation;
-
-                    if (overrideData.customEulerRotation == Vector3.zero)
-                    {
-                        // ✅ 회전 오버라이드가 없으면 현재 rotation 유지
-                        itemRotation = Quaternion.Inverse(holdPosition.rotation) * heldObject.transform.rotation;
-                        Debug.Log($"[Pickup] 회전 유지: {heldObject.transform.rotation.eulerAngles}");
-                    }
-                    else
-                    {
-                        // ✅ 오버라이드 회전이 존재하면 적용
-                        itemRotation = Quaternion.Euler(overrideData.customEulerRotation);
-                        Debug.Log($"[Pickup] 회전 오버라이드 적용: {overrideData.customEulerRotation}");
-                    }
-
-                    // 최종 적용
+                    // 회전 처리
+                    Quaternion itemRotation = (overrideData.customEulerRotation == Vector3.zero)
+                        ? Quaternion.Inverse(holdPosition.rotation) * heldObject.transform.rotation
+                        : Quaternion.Euler(overrideData.customEulerRotation);
                     heldObject.transform.localRotation = itemRotation;
 
-                    // 위치 적용
+                    // 위치 보정값 적용
                     Vector3 offset = overrideData.holdOffset;
-                    holdPosition.localPosition = new Vector3(offset.x, offset.y, offset.z != 0f ? offset.z : 1.2f);
+                    heldObjectHoldX = offset.x;
+                    heldObjectHoldY = offset.y;
                     heldObjectHoldZ = offset.z != 0f ? offset.z : 1.2f;
+
+                    holdPosition.localPosition = new Vector3(heldObjectHoldX, heldObjectHoldY, heldObjectHoldZ);
 
                     // 스케일 적용
                     overrideData.ApplyHeldScale();
+
+                    Debug.Log($"[Pickup] Offset 적용: {offset}, Rotation: {(overrideData.customEulerRotation == Vector3.zero ? "원본 유지" : overrideData.customEulerRotation.ToString())}");
                 }
                 else
                 {
+                    heldObjectHoldX = 0f;
+                    heldObjectHoldY = 0f;
                     heldObjectHoldZ = 1.2f;
                     holdPosition.localPosition = new Vector3(0f, 0f, heldObjectHoldZ);
-                }
-
-
-
-                if (heldObject.TryGetComponent(out PickupHoldOverride holdOverride))
-                {
-                    holdPosition.localPosition = holdOverride.GetOffset();
-                }
-                else
-                {
-                    holdPosition.localPosition = new Vector3(0f, 0f, 1.2f); // 기본값
+                    heldObject.transform.localRotation = Quaternion.Inverse(holdPosition.rotation) * heldObject.transform.rotation;
+                    Debug.Log($"[Pickup] Override 없음 → 기본 위치/회전 유지");
                 }
 
                 isHoldingItem = true;
             }
         }
     }
+
 
 
     private void DropItem()
@@ -713,7 +720,6 @@ public class FirstPersonController : MonoBehaviour
 
         Vector3 boxHalfExtents;
 
-        // ✅ Renderer가 없을 경우를 대비한 안전한 처리
         Renderer rend = heldObject.GetComponentInChildren<Renderer>();
         if (rend != null)
         {
@@ -721,9 +727,8 @@ public class FirstPersonController : MonoBehaviour
         }
         else
         {
-            // fallback 값 (대충 가로/세로 0.15, 깊이 0.25로 가정)
             boxHalfExtents = new Vector3(0.15f, 0.15f, 0.25f);
-            Debug.LogWarning($"[AdjustHoldPosition] Renderer 없음 → 기본 박스 크기 사용 (object: {heldObject.name})");
+            Debug.LogWarning($"[AdjustHoldPosition] Renderer 없음 → 기본 크기 사용 (object: {heldObject.name})");
         }
 
         Vector3 origin = playerCamera.transform.position;
@@ -736,9 +741,142 @@ public class FirstPersonController : MonoBehaviour
             targetZ = Mathf.Clamp(distance - 0.05f, minZ, defaultZ);
         }
 
-        Vector3 current = holdPosition.localPosition;
-        float newZ = Mathf.Lerp(current.z, targetZ, Time.deltaTime * holdAdjustSpeed);
-        holdPosition.localPosition = new Vector3(current.x, current.y, newZ);
+        float currentZ = holdPosition.localPosition.z;
+        float newZ = Mathf.Lerp(currentZ, targetZ, Time.deltaTime * holdAdjustSpeed);
+
+        holdPosition.localPosition = new Vector3(heldObjectHoldX, heldObjectHoldY, newZ);
     }
+
+    public void ApplyGlassEffect(string materialName)
+    {
+        switch (materialName.ToLower())
+        {
+            case "red bottle":
+                Debug.Log("[GlassEffect] 🔴 빨강 효과 적용됨");
+                StartCoroutine(ApplyRedLightEffect());
+                break;
+
+            case "green bottle":
+                Debug.Log("[GlassEffect] 🟢 초록 효과 적용됨");
+                StartCoroutine(ApplyGreenSpeedPenalty());
+                break;
+
+            case "blue bottle":
+                Debug.Log("[GlassEffect] 🔵 파랑 효과 적용됨");
+                StartCoroutine(ApplyBlueRangeBoost());
+                break;
+
+            case "purple bottle":
+                Debug.Log("[GlassEffect] 🟣 자주 효과 적용됨");
+                // 효과 미정
+                break;
+
+            case "yellow bottle":
+                Debug.Log("[GlassEffect] 🟡 노랑 효과 적용됨");
+                StartCoroutine(ApplyYellowRangePenalty());
+                break;
+
+            case "pink bottle":
+                Debug.Log("[GlassEffect] 💖 분홍 효과 적용됨");
+                StartCoroutine(ApplyPinkLockLight());
+                break;
+
+            default:
+                Debug.Log($"[GlassEffect] ❓ '{materialName}' 효과 적용됨 (정의되지 않음)");
+                break;
+        }
+    }
+
+    private IEnumerator ApplyRedLightEffect()
+    {
+        Color originalColor = pointLight.color;
+        pointLight.color = Color.red;
+
+        yield return new WaitForSeconds(redDuration);
+
+        pointLight.color = originalColor;
+    }
+
+    private IEnumerator ApplyBlueRangeBoost()
+    {
+        float originalRange = maxLightRange;
+        maxLightRange += blueRangeBonus;
+
+        yield return new WaitForSeconds(blueDuration);
+
+        maxLightRange = originalRange;
+    }
+
+    private IEnumerator ApplyGreenSpeedPenalty()
+    {
+        float origWalk = walkSpeed;
+        float origSprint = sprintSpeed;
+        float origCrouch = crouchSpeed;
+
+        walkSpeed -= speedPenalty;
+        sprintSpeed -= speedPenalty;
+        crouchSpeed -= speedPenalty;
+
+        yield return new WaitForSeconds(greenDuration);
+
+        walkSpeed = origWalk;
+        sprintSpeed = origSprint;
+        crouchSpeed = origCrouch;
+    }
+
+    private IEnumerator ApplyYellowRangePenalty()
+    {
+        float originalRange = maxLightRange;
+        maxLightRange -= yellowRangePenalty;
+
+        if (glassEffectAudioSource != null && yellowEffectClip != null)
+            glassEffectAudioSource.PlayOneShot(yellowEffectClip);
+
+        yield return new WaitForSeconds(yellowDuration);
+
+        maxLightRange = originalRange;
+    }
+
+    private IEnumerator ApplyPinkLockLight()
+    {
+        if (glassEffectAudioSource != null && pinkEffectClip != null)
+            glassEffectAudioSource.PlayOneShot(pinkEffectClip);
+
+        isLightLocked = true;
+
+        pointLight.range = maxLightRange;
+        pointLight.intensity = pointLightIntensity;
+
+        float timer = 0f;
+        while (timer < pinkDuration)
+        {
+            // 유지
+            pointLight.range = maxLightRange;
+            pointLight.intensity = pointLightIntensity;
+            timer += Time.deltaTime;
+            yield return null;
+        }
+
+        isLightLocked = false;
+
+        // ✅ 서서히 줄이기 시작
+        float fadeDuration = 1.5f; // 서서히 줄이는 시간 (원하면 Serialize 가능)
+        float t = 0f;
+        float startRange = pointLight.range;
+        float startIntensity = pointLight.intensity;
+
+        while (t < fadeDuration)
+        {
+            t += Time.deltaTime;
+            float lerpT = t / fadeDuration;
+            pointLight.range = Mathf.Lerp(startRange, 0f, lerpT);
+            pointLight.intensity = Mathf.Lerp(startIntensity, 0f, lerpT);
+            yield return null;
+        }
+
+        pointLight.range = 0f;
+        pointLight.intensity = 0f;
+    }
+
 
 }
