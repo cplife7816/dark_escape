@@ -141,8 +141,8 @@ public class FirstPersonController : MonoBehaviour
     [SerializeField] private TextMeshProUGUI subtitleTextUI;
 
     private float defaultHoldZ = 1.2f;      // 손의 기본 거리
-    private float minHoldZ = 0.25f;          // 벽과 너무 가까울 때 최소 거리
-    private float holdAdjustSpeed = 10f;    // 보간 속도
+    private float minHoldZ = 0.45f;          // 벽과 너무 가까울 때 최소 거리
+    private float holdAdjustSpeed = 15f;    // 보간 속도
     private float heldObjectHoldX = 0f;
     private float heldObjectHoldY = 0f;
     private float heldObjectHoldZ = 1.2f; // 기본 거리
@@ -715,7 +715,6 @@ public class FirstPersonController : MonoBehaviour
         if (!isHoldingItem || holdPosition == null || heldObject == null) return;
 
         float defaultZ = heldObjectHoldZ;
-        float minZ = 0.3f;
         float targetZ = defaultZ;
 
         Vector3 boxHalfExtents;
@@ -738,7 +737,7 @@ public class FirstPersonController : MonoBehaviour
         if (Physics.BoxCast(origin, boxHalfExtents, dir, out RaycastHit hit, playerCamera.transform.rotation, checkDistance, ~LayerMask.GetMask("IgnorePlayerRay")))
         {
             float distance = hit.distance;
-            targetZ = Mathf.Clamp(distance - 0.05f, minZ, defaultZ);
+            targetZ = Mathf.Clamp(distance - 0.05f, minHoldZ, defaultZ);
         }
 
         float currentZ = holdPosition.localPosition.z;

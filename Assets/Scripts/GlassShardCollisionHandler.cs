@@ -18,7 +18,7 @@ public class GlassShardCollisionHandler : MonoBehaviour
 
     private IEnumerator DisablePhysicsAfterDelay()
     {
-        yield return new WaitForSeconds(1f);
+        yield return new WaitForSeconds(5f); 
 
         Rigidbody rb = GetComponent<Rigidbody>();
         if (rb != null)
@@ -34,4 +34,5 @@ public class GlassShardCollisionHandler : MonoBehaviour
             Debug.Log($"[GlassShard] {name}: Collider ({col.GetType().Name}) disabled");
         }
     }
+
 }

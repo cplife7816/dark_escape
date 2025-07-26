@@ -32,7 +32,7 @@ public class GlassBreakController : MonoBehaviour, IDroppable
     [Header("Ground Sensor")]
     [SerializeField] private GameObject groundSensorObject;
 
-    private static bool colorChangedOnce = false;
+    private static HashSet<string> colorChangedSet = new HashSet<string>();
     private Rigidbody rb;
     private bool isBroken = false;
     private BoxCollider mainCollider;
@@ -72,7 +72,14 @@ public class GlassBreakController : MonoBehaviour, IDroppable
             mainCollider.enabled = true;
 
         if (groundSensorObject != null)
-            groundSensorObject.SetActive(true); // ✅ 드롭할 때 켜기
+            groundSensorObject.SetActive(true);
+
+        // ✅ 플레이어가 다시 줍지 못하도록 Item 태그 제거
+        if (CompareTag("Item"))
+        {
+            gameObject.tag = "Untagged";
+            Debug.Log("[GlassBreak] Dropped → Item 태그 제거됨");
+        }
     }
 
     private void OnTransformParentChanged()
@@ -98,11 +105,13 @@ public class GlassBreakController : MonoBehaviour, IDroppable
         TriggerLight();
         PlayBreakSound();
 
-        float duration = colorChangedOnce ? 0.5f : colorChangeDuration;
-        StartCoroutine(ChangeWhiteMaterialsOnly(duration));
-        StartCoroutine(DisableCollisionsAfterBreak());
+        float duration = colorChangedSet.Contains(targetMaterialName) ? 0.5f : colorChangeDuration;
+        StartCoroutine(ChangeWhiteMaterialsOnly(duration)); 
 
-        colorChangedOnce = true;
+        colorChangedSet.Add(targetMaterialName);
+
+        StartCoroutine(DisableCollisionsAfterBreak());
+    
         ApplyNameToMatchingObjects();
     }
 
@@ -116,6 +125,11 @@ public class GlassBreakController : MonoBehaviour, IDroppable
         if (groundSensorObject != null)
             groundSensorObject.SetActive(false); // ✅ 더 이상 감지하지 않도록
         ApplyEffectToPlayer();
+
+        foreach (var keyObj in GetComponentsInChildren<KeyObject>(true))
+        {
+            keyObj.ReleaseFromGlass();
+        }
     }
 
     private void TriggerLight()
@@ -193,7 +207,7 @@ public class GlassBreakController : MonoBehaviour, IDroppable
 
     private IEnumerator DisableCollisionsAfterBreak()
     {
-        yield return new WaitForSeconds(3f);
+        yield return new WaitForSeconds(2f);
 
         if (shatteredGlass != null)
         {
@@ -211,6 +225,7 @@ public class GlassBreakController : MonoBehaviour, IDroppable
 
         if (rb != null)
             rb.isKinematic = true;
+
     }
 
     private void ApplyNameToMatchingObjects()
