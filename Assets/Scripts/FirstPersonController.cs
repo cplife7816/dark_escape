@@ -147,11 +147,34 @@ public class FirstPersonController : MonoBehaviour
     private float heldObjectHoldY = 0f;
     private float heldObjectHoldZ = 1.2f; // 기본 거리
 
+
+    private Coroutine redCoroutine;
+    private Coroutine blueCoroutine;
+    private Coroutine greenCoroutine;
+    private Coroutine yellowCoroutine;
+    private Coroutine pinkCoroutine;
+
+    private float defaultWalkSpeed;
+    private float defaultSprintSpeed;
+    private float defaultCrouchSpeed;
+    private float defaultMaxLightRange;
+
     void Awake()
     {
         playerCamera = GetComponentInChildren<Camera>();
         characterController = GetComponent<CharacterController>();
         defaultYpos = playerCamera.transform.localPosition.y;
+
+        if (pointLight != null)
+        {
+            pointLight.color = defaultLightColor;
+            defaultMaxLightRange = maxLightRange; // ✅ 기본 라이트 범위 저장
+        }
+
+        defaultWalkSpeed = walkSpeed;
+        defaultSprintSpeed = sprintSpeed;
+        defaultCrouchSpeed = crouchSpeed;
+
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
 
@@ -622,6 +645,14 @@ public class FirstPersonController : MonoBehaviour
                     newIcon = window.isLocked ? lockIcon : doorIcon;
                 }
             }
+            else if (tag == "Interact" && heldObject != null)
+            {
+                var socket = hit.collider.GetComponentInParent<IItemSocket>();
+                if (socket != null && socket.CanInteract(heldObject))
+                {
+                    newIcon = itemIcon;
+                }
+            }
         }
 
         ShowInteractIcon(newIcon); // 항상 아이콘 보여줌
@@ -746,98 +777,136 @@ public class FirstPersonController : MonoBehaviour
         holdPosition.localPosition = new Vector3(heldObjectHoldX, heldObjectHoldY, newZ);
     }
 
+    private readonly Color defaultLightColor = Color.white; // ✅ 기본값을 흰색으로 고정
+
     public void ApplyGlassEffect(string materialName)
     {
-        switch (materialName.ToLower())
+        string lower = materialName.ToLower();
+
+        if (lower.Contains("red"))
         {
-            case "red bottle":
-                Debug.Log("[GlassEffect] 🔴 빨강 효과 적용됨");
-                StartCoroutine(ApplyRedLightEffect());
-                break;
-
-            case "green bottle":
-                Debug.Log("[GlassEffect] 🟢 초록 효과 적용됨");
-                StartCoroutine(ApplyGreenSpeedPenalty());
-                break;
-
-            case "blue bottle":
-                Debug.Log("[GlassEffect] 🔵 파랑 효과 적용됨");
-                StartCoroutine(ApplyBlueRangeBoost());
-                break;
-
-            case "purple bottle":
-                Debug.Log("[GlassEffect] 🟣 자주 효과 적용됨");
-                // 효과 미정
-                break;
-
-            case "yellow bottle":
-                Debug.Log("[GlassEffect] 🟡 노랑 효과 적용됨");
-                StartCoroutine(ApplyYellowRangePenalty());
-                break;
-
-            case "pink bottle":
-                Debug.Log("[GlassEffect] 💖 분홍 효과 적용됨");
-                StartCoroutine(ApplyPinkLockLight());
-                break;
-
-            default:
-                Debug.Log($"[GlassEffect] ❓ '{materialName}' 효과 적용됨 (정의되지 않음)");
-                break;
+            Debug.Log($"[GlassEffect] 🔴 빨강 효과 인식됨: {materialName}");
+            RestartCoroutine(ref redCoroutine, RedLightEffectCoroutine());
+        }
+        else if (lower.Contains("green"))
+        {
+            Debug.Log($"[GlassEffect] 🟢 초록 효과 인식됨: {materialName}");
+            RestartCoroutine(ref greenCoroutine, GreenSpeedPenaltyCoroutine());
+        }
+        else if (lower.Contains("blue"))
+        {
+            Debug.Log($"[GlassEffect] 🔵 파랑 효과 인식됨: {materialName}");
+            RestartCoroutine(ref blueCoroutine, BlueRangeBoostCoroutine());
+        }
+        else if (lower.Contains("yellow"))
+        {
+            Debug.Log($"[GlassEffect] 🟡 노랑 효과 인식됨: {materialName}");
+            RestartCoroutine(ref yellowCoroutine, YellowRangePenaltyCoroutine());
+        }
+        else if (lower.Contains("pink"))
+        {
+            Debug.Log($"[GlassEffect] 💖 분홍 효과 인식됨: {materialName}");
+            RestartCoroutine(ref pinkCoroutine, PinkLockLightCoroutine());
+        }
+        else
+        {
+            Debug.Log($"[GlassEffect] ❓ '{materialName}' 효과 이름 인식 실패");
         }
     }
 
-    private IEnumerator ApplyRedLightEffect()
+    private void RestartCoroutine(ref Coroutine coroutine, IEnumerator routine)
     {
-        Color originalColor = pointLight.color;
+        if (coroutine != null)
+        {
+            Debug.Log("[Coroutine] 기존 코루틴 중단");
+            StopCoroutine(coroutine);
+        }
+
+        coroutine = StartCoroutine(routine);
+    }
+
+    private IEnumerator RedLightEffectCoroutine()
+    {
+        Debug.Log("[RedEffect] 시작");
         pointLight.color = Color.red;
 
-        yield return new WaitForSeconds(redDuration);
+        float elapsed = 0f;
+        while (elapsed < redDuration)
+        {
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
 
-        pointLight.color = originalColor;
+        pointLight.color = defaultLightColor; // ✅ 흰색으로 복귀
+        Debug.Log("[RedEffect] 종료, 흰색 복귀");
     }
 
-    private IEnumerator ApplyBlueRangeBoost()
+    private IEnumerator BlueRangeBoostCoroutine()
     {
-        float originalRange = maxLightRange;
-        maxLightRange += blueRangeBonus;
+        Debug.Log("[BlueEffect] 시작");
 
-        yield return new WaitForSeconds(blueDuration);
+        maxLightRange = defaultMaxLightRange + blueRangeBonus;
+        Debug.Log($"[BlueEffect] maxLightRange 증가: {maxLightRange}");
 
-        maxLightRange = originalRange;
+        float elapsed = 0f;
+        while (elapsed < blueDuration)
+        {
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+
+        maxLightRange = defaultMaxLightRange;
+        Debug.Log("[BlueEffect] 종료, maxLightRange 복구 완료");
     }
 
-    private IEnumerator ApplyGreenSpeedPenalty()
+    private IEnumerator GreenSpeedPenaltyCoroutine()
     {
-        float origWalk = walkSpeed;
-        float origSprint = sprintSpeed;
-        float origCrouch = crouchSpeed;
+        Debug.Log("[GreenEffect] 시작");
 
-        walkSpeed -= speedPenalty;
-        sprintSpeed -= speedPenalty;
-        crouchSpeed -= speedPenalty;
+        walkSpeed = defaultWalkSpeed - speedPenalty;
+        sprintSpeed = defaultSprintSpeed - speedPenalty;
+        crouchSpeed = defaultCrouchSpeed - speedPenalty;
 
-        yield return new WaitForSeconds(greenDuration);
+        Debug.Log($"[GreenEffect] 속도 감소: walk={walkSpeed}, sprint={sprintSpeed}, crouch={crouchSpeed}");
 
-        walkSpeed = origWalk;
-        sprintSpeed = origSprint;
-        crouchSpeed = origCrouch;
+        float elapsed = 0f;
+        while (elapsed < greenDuration)
+        {
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+
+        walkSpeed = defaultWalkSpeed;
+        sprintSpeed = defaultSprintSpeed;
+        crouchSpeed = defaultCrouchSpeed;
+
+        Debug.Log("[GreenEffect] 종료, 속도 복구 완료");
     }
 
-    private IEnumerator ApplyYellowRangePenalty()
+    private IEnumerator YellowRangePenaltyCoroutine()
     {
+        Debug.Log("[YellowEffect] 시작");
         float originalRange = maxLightRange;
         maxLightRange -= yellowRangePenalty;
+        Debug.Log($"[YellowEffect] maxLightRange 감소: {maxLightRange}");
 
         if (glassEffectAudioSource != null && yellowEffectClip != null)
             glassEffectAudioSource.PlayOneShot(yellowEffectClip);
 
-        yield return new WaitForSeconds(yellowDuration);
+        float elapsed = 0f;
+        while (elapsed < yellowDuration)
+        {
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
 
         maxLightRange = originalRange;
+        Debug.Log("[YellowEffect] 종료, maxLightRange 복구");
     }
 
-    private IEnumerator ApplyPinkLockLight()
+    private IEnumerator PinkLockLightCoroutine()
     {
+        Debug.Log("[PinkEffect] 시작");
         if (glassEffectAudioSource != null && pinkEffectClip != null)
             glassEffectAudioSource.PlayOneShot(pinkEffectClip);
 
@@ -845,11 +914,11 @@ public class FirstPersonController : MonoBehaviour
 
         pointLight.range = maxLightRange;
         pointLight.intensity = pointLightIntensity;
+        Debug.Log("[PinkEffect] Light 유지 시작");
 
         float timer = 0f;
         while (timer < pinkDuration)
         {
-            // 유지
             pointLight.range = maxLightRange;
             pointLight.intensity = pointLightIntensity;
             timer += Time.deltaTime;
@@ -857,9 +926,9 @@ public class FirstPersonController : MonoBehaviour
         }
 
         isLightLocked = false;
+        Debug.Log("[PinkEffect] 유지 종료, 서서히 감소 시작");
 
-        // ✅ 서서히 줄이기 시작
-        float fadeDuration = 1.5f; // 서서히 줄이는 시간 (원하면 Serialize 가능)
+        float fadeDuration = 1.5f;
         float t = 0f;
         float startRange = pointLight.range;
         float startIntensity = pointLight.intensity;
@@ -875,7 +944,6 @@ public class FirstPersonController : MonoBehaviour
 
         pointLight.range = 0f;
         pointLight.intensity = 0f;
+        Debug.Log("[PinkEffect] 완전히 종료");
     }
-
-
 }

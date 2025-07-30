@@ -155,4 +155,10 @@ public class SinkInteraction : MonoBehaviour, IItemSocket
         if (toIntensity == 0f && toRange == 0f)
             pointLight.enabled = false;
     }
+
+    public bool CanInteract(GameObject item)
+    {
+        return !isUsed && item != null && item.name == "ScrewDriver";
+    }
+
 }

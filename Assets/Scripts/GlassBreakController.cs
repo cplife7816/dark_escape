@@ -48,7 +48,8 @@ public class GlassBreakController : MonoBehaviour, IDroppable
         if (pointLight != null)
         {
             pointLight.range = 0f;
-            pointLight.intensity = 0f;
+            pointLight.intensity = 0f; // 유지
+            pointLight.enabled = true; // 항상 켜져 있어야 효과 반영됨
         }
 
         if (groundSensorObject != null)
@@ -136,12 +137,8 @@ public class GlassBreakController : MonoBehaviour, IDroppable
     {
         if (pointLight == null) return;
 
-        pointLight.enabled = true;
-
-        if (LightPulseController.Instance != null)
-        {
-            LightPulseController.Instance.TriggerPulse(pointLight, lightRange, lightIntensity, lightDuration, this);
-        }
+        StopAllCoroutines(); // 중복 방지
+        StartCoroutine(PulseLightWithRatios());
     }
 
     private void PlayBreakSound()
@@ -268,6 +265,45 @@ public class GlassBreakController : MonoBehaviour, IDroppable
         if (player == null) return;
 
         player.ApplyGlassEffect(targetMaterialName); // 추출 없이 그대로 전달
+    }
+
+    private IEnumerator PulseLightWithRatios()
+    {
+        float total = pulseUpRatio + pulseHoldRatio + pulseDownRatio;
+        float upTime = lightDuration * (pulseUpRatio / total);
+        float holdTime = lightDuration * (pulseHoldRatio / total);
+        float downTime = lightDuration * (pulseDownRatio / total);
+
+        float timer = 0f;
+
+        // 커지기
+        while (timer < upTime)
+        {
+            timer += Time.deltaTime;
+            float t = timer / upTime;
+            pointLight.range = Mathf.Lerp(0f, lightRange, t);
+            pointLight.intensity = Mathf.Lerp(0f, lightIntensity, t);
+            yield return null;
+        }
+
+        // 유지
+        pointLight.range = lightRange;
+        pointLight.intensity = lightIntensity;
+        yield return new WaitForSeconds(holdTime);
+
+        // 줄어들기
+        timer = 0f;
+        while (timer < downTime)
+        {
+            timer += Time.deltaTime;
+            float t = timer / downTime;
+            pointLight.range = Mathf.Lerp(lightRange, 0f, t);
+            pointLight.intensity = Mathf.Lerp(lightIntensity, 0f, t);
+            yield return null;
+        }
+
+        pointLight.range = 0f;
+        pointLight.intensity = 0f;
     }
 
 }

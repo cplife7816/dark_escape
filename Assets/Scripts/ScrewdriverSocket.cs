@@ -40,4 +40,10 @@ public class ScrewdriverSocket : MonoBehaviour, IItemSocket
         isCombined = true;
         return true;
     }
+
+    public bool CanInteract(GameObject item)
+    {
+        return !isCombined && item != null && item.name.Contains("Driver_Handle");
+    }
+
 }

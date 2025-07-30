@@ -4,4 +4,5 @@
 public interface IItemSocket
 {
     bool TryInteract(GameObject item);
+    bool CanInteract(GameObject item);
 }
