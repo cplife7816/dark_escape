@@ -1,18 +1,26 @@
-﻿using UnityEngine;
+﻿using System.Collections;
+using UnityEngine;
 
 public class KeyInsertSocket : MonoBehaviour, IItemSocket
 {
     [Header("Required Key Name")]
-    [SerializeField] private string requiredKeyName;  // 이름 비교 기준
+    [SerializeField] private string requiredKeyName;
 
     [Header("Object to Activate")]
-    [SerializeField] private GameObject keyVisualObject;  // 열쇠 비주얼 오브젝트
+    [SerializeField] private GameObject keyVisualObject;
 
     [Header("Sound Settings")]
     [SerializeField] private AudioSource audioSource;
     [SerializeField] private AudioClip insertSound;
 
+    [Header("Light Settings")]
+    [SerializeField] private Light pointLight;
+    [SerializeField] private float lightRange = 5f;
+    [SerializeField] private float lightIntensity = 7f;
+    [SerializeField] private float lightDuration = 0.5f;
+
     private bool isUsed = false;
+    private Coroutine lightCoroutine;
 
     public bool TryInteract(GameObject item)
     {
@@ -23,18 +31,70 @@ public class KeyInsertSocket : MonoBehaviour, IItemSocket
 
         isUsed = true;
 
-        // 🔊 효과음 재생
+        // 🔊 소리
         if (audioSource != null && insertSound != null)
+        {
             audioSource.PlayOneShot(insertSound);
+        }
 
-        // 🧱 비주얼 오브젝트 활성화 (ex. 꽂힌 열쇠)
+        // 💡 빛 효과
+        if (pointLight != null)
+        {
+            TriggerLocalLightPulse();
+        }
+
+        // 🔑 비주얼 키 삽입 표현
         if (keyVisualObject != null)
             keyVisualObject.SetActive(true);
 
-        // 🔒 플레이어 손의 오브젝트 비활성화
+        // 🧤 아이템 비활성화
         item.SetActive(false);
 
-        return true;  // 드롭 처리되도록 true 반환
+        return true;
+    }
+
+    private void TriggerLocalLightPulse()
+    {
+        if (lightCoroutine != null)
+            StopCoroutine(lightCoroutine);
+
+        lightCoroutine = StartCoroutine(PulseLightEffect());
+    }
+
+    private IEnumerator PulseLightEffect()
+    {
+        float halfDuration = lightDuration / 2f;
+        float timer = 0f;
+
+        float startRange = pointLight.range;
+        float startIntensity = pointLight.intensity;
+
+        // 증가 구간
+        while (timer < halfDuration)
+        {
+            timer += Time.deltaTime;
+            float t = timer / halfDuration;
+            pointLight.range = Mathf.Lerp(startRange, lightRange, t);
+            pointLight.intensity = Mathf.Lerp(startIntensity, lightIntensity, t);
+            yield return null;
+        }
+
+        // 감소 구간
+        timer = 0f;
+        startRange = pointLight.range;
+        startIntensity = pointLight.intensity;
+
+        while (timer < halfDuration)
+        {
+            timer += Time.deltaTime;
+            float t = timer / halfDuration;
+            pointLight.range = Mathf.Lerp(startRange, 0f, t);
+            pointLight.intensity = Mathf.Lerp(startIntensity, 0f, t);
+            yield return null;
+        }
+
+        pointLight.range = 0f;
+        pointLight.intensity = 0f;
     }
 
     public bool CanInteract(GameObject item)

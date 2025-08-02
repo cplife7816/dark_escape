@@ -451,6 +451,16 @@ public class FirstPersonController : MonoBehaviour
                 }
             }
 
+            // ✅ 2. 아이템이 없을 때만 TryInteractable 호출
+            if (!interactionHandled && !isHoldingItem && target.CompareTag("Interact"))
+            {
+                if (target.TryGetComponent<ITryInteractable>(out var tryInteractable))
+                {
+                    tryInteractable.TryInteract();
+                    interactionHandled = true;
+                }
+            }
+
             // ✅ 2. 문/창문 상호작용 (항상 허용)
             if (!interactionHandled && target.CompareTag("Door"))
             {
@@ -518,6 +528,9 @@ public class FirstPersonController : MonoBehaviour
                 {
                     rb.isKinematic = true;
                     rb.useGravity = false;
+
+                    // ✅ 잡을 때 Interpolate 활성화
+                    rb.interpolation = RigidbodyInterpolation.Interpolate;
                 }
 
                 Collider col = heldObject.GetComponent<Collider>();
@@ -652,6 +665,10 @@ public class FirstPersonController : MonoBehaviour
                 {
                     newIcon = itemIcon;
                 }
+            }
+            else if (tag == "Interact")
+            {
+                newIcon = itemIcon;
             }
         }
 
@@ -844,7 +861,7 @@ public class FirstPersonController : MonoBehaviour
     private IEnumerator BlueRangeBoostCoroutine()
     {
         Debug.Log("[BlueEffect] 시작");
-
+        pointLight.color = Color.blue;
         maxLightRange = defaultMaxLightRange + blueRangeBonus;
         Debug.Log($"[BlueEffect] maxLightRange 증가: {maxLightRange}");
 
@@ -856,13 +873,14 @@ public class FirstPersonController : MonoBehaviour
         }
 
         maxLightRange = defaultMaxLightRange;
+        pointLight.color = defaultLightColor;
         Debug.Log("[BlueEffect] 종료, maxLightRange 복구 완료");
     }
 
     private IEnumerator GreenSpeedPenaltyCoroutine()
     {
         Debug.Log("[GreenEffect] 시작");
-
+        pointLight.color = Color.green;
         walkSpeed = defaultWalkSpeed - speedPenalty;
         sprintSpeed = defaultSprintSpeed - speedPenalty;
         crouchSpeed = defaultCrouchSpeed - speedPenalty;
@@ -879,15 +897,15 @@ public class FirstPersonController : MonoBehaviour
         walkSpeed = defaultWalkSpeed;
         sprintSpeed = defaultSprintSpeed;
         crouchSpeed = defaultCrouchSpeed;
-
+        pointLight.color = defaultLightColor;
         Debug.Log("[GreenEffect] 종료, 속도 복구 완료");
     }
 
     private IEnumerator YellowRangePenaltyCoroutine()
     {
         Debug.Log("[YellowEffect] 시작");
-        float originalRange = maxLightRange;
-        maxLightRange -= yellowRangePenalty;
+        pointLight.color = Color.yellow;
+        maxLightRange = defaultMaxLightRange - yellowRangePenalty;
         Debug.Log($"[YellowEffect] maxLightRange 감소: {maxLightRange}");
 
         if (glassEffectAudioSource != null && yellowEffectClip != null)
@@ -900,50 +918,38 @@ public class FirstPersonController : MonoBehaviour
             yield return null;
         }
 
-        maxLightRange = originalRange;
+        maxLightRange = defaultMaxLightRange;
+        pointLight.color = defaultLightColor;
         Debug.Log("[YellowEffect] 종료, maxLightRange 복구");
     }
 
     private IEnumerator PinkLockLightCoroutine()
     {
         Debug.Log("[PinkEffect] 시작");
+
+        // 빛 유지: 감쇠 금지
+        isLightLocked = true;
+
+        // 색상 분홍빛 (#FF77B3)
+        pointLight.color = new Color(1.0f, 0.4667f, 0.7019f);
+
+        // 오디오 재생
         if (glassEffectAudioSource != null && pinkEffectClip != null)
             glassEffectAudioSource.PlayOneShot(pinkEffectClip);
 
-        isLightLocked = true;
-
-        pointLight.range = maxLightRange;
-        pointLight.intensity = pointLightIntensity;
-        Debug.Log("[PinkEffect] Light 유지 시작");
-
-        float timer = 0f;
-        while (timer < pinkDuration)
+        // duration 유지 후 복구
+        float elapsed = 0f;
+        while (elapsed < pinkDuration)
         {
-            pointLight.range = maxLightRange;
-            pointLight.intensity = pointLightIntensity;
-            timer += Time.deltaTime;
+            elapsed += Time.deltaTime;
             yield return null;
         }
 
+        // 복귀
         isLightLocked = false;
-        Debug.Log("[PinkEffect] 유지 종료, 서서히 감소 시작");
-
-        float fadeDuration = 1.5f;
-        float t = 0f;
-        float startRange = pointLight.range;
-        float startIntensity = pointLight.intensity;
-
-        while (t < fadeDuration)
-        {
-            t += Time.deltaTime;
-            float lerpT = t / fadeDuration;
-            pointLight.range = Mathf.Lerp(startRange, 0f, lerpT);
-            pointLight.intensity = Mathf.Lerp(startIntensity, 0f, lerpT);
-            yield return null;
-        }
-
-        pointLight.range = 0f;
-        pointLight.intensity = 0f;
-        Debug.Log("[PinkEffect] 완전히 종료");
+        pointLight.color = defaultLightColor;
+        Debug.Log("[PinkEffect] 종료 → 흰색 복귀");
     }
+
+
 }

@@ -25,6 +25,7 @@ public class WallDrop : MonoBehaviour
     [SerializeField] private float lightDuration = 0.5f;
 
     private bool hasDropped = false;
+    private Coroutine lightCoroutine;
 
     private void Update()
     {
@@ -44,10 +45,13 @@ public class WallDrop : MonoBehaviour
         if (audioSource != null && dropSound != null)
             audioSource.PlayOneShot(dropSound);
 
-        // 💡 빛 펄스
-        if (pointLight != null && LightPulseController.Instance != null)
+        // 💡 빛 펄스 직접 실행
+        if (pointLight != null)
         {
-            LightPulseController.Instance.TriggerPulse(pointLight, lightRange, lightIntensity, lightDuration, this);
+            if (lightCoroutine != null)
+                StopCoroutine(lightCoroutine);
+
+            lightCoroutine = StartCoroutine(PulseLightEffect());
         }
     }
 
@@ -67,5 +71,45 @@ public class WallDrop : MonoBehaviour
         }
 
         transform.localPosition = targetLocalPos;
+    }
+
+    private IEnumerator PulseLightEffect()
+    {
+        float half = lightDuration / 2f;
+        float timer = 0f;
+
+        float startRange = 0f;
+        float startIntensity = 0f;
+
+        pointLight.range = 0f;
+        pointLight.intensity = 0f;
+        pointLight.enabled = true; // 항상 켜짐 보장
+
+        // ➤ 빛 커지기
+        while (timer < half)
+        {
+            timer += Time.deltaTime;
+            float t = timer / half;
+            pointLight.range = Mathf.Lerp(startRange, lightRange, t);
+            pointLight.intensity = Mathf.Lerp(startIntensity, lightIntensity, t);
+            yield return null;
+        }
+
+        // ➤ 빛 줄어들기
+        timer = 0f;
+        startRange = pointLight.range;
+        startIntensity = pointLight.intensity;
+
+        while (timer < half)
+        {
+            timer += Time.deltaTime;
+            float t = timer / half;
+            pointLight.range = Mathf.Lerp(startRange, 0f, t);
+            pointLight.intensity = Mathf.Lerp(startIntensity, 0f, t);
+            yield return null;
+        }
+
+        pointLight.range = 0f;
+        pointLight.intensity = 0f;
     }
 }
