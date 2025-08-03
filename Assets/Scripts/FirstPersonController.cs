@@ -252,7 +252,7 @@ public class FirstPersonController : MonoBehaviour
     {
         if (IsCrouching)
         {
-            footstepAudioSource.volume = 0.2f;
+            footstepAudioSource.volume = 0.3f;
             extraRange = crouch;
         }
         else
