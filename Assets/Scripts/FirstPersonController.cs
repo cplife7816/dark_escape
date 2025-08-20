@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
+using UnityEngine.Events;
 
 public class FirstPersonController : MonoBehaviour
 {
@@ -158,6 +159,24 @@ public class FirstPersonController : MonoBehaviour
     private float defaultSprintSpeed;
     private float defaultCrouchSpeed;
     private float defaultMaxLightRange;
+
+    [Header("Threat Tint (Enemy Encounter)")]
+    [SerializeField] private Color threatTintColor = Color.red;   // 적대자 조우 시 목표 색
+    [SerializeField] private float defaultThreatFade = 0.4f;
+
+    private Coroutine threatTintCoroutine;                        // 적대자 틴트 코루틴
+    private bool threatTintDesired = false;                       // 현재 적대자 틴트 유지 의도
+    private bool IsRedGlassActive => redCoroutine != null;        // 유리병 '빨강' 효과 실행 중?
+
+    [Header("Game Over")]
+    [SerializeField] private CanvasGroup gameOverOverlay;  // 옵션(UI 페이드용, 없으면 null OK)
+    [SerializeField] private float gameOverFadeSeconds = 1.0f;
+    [SerializeField] private AudioSource sfxSource;        // 옵션(사운드)
+    [SerializeField] private AudioClip gameOverClip;       // 옵션(사운드)
+    [SerializeField] private UnityEvent onGameOver;        // 옵션(씬 전환/UI 등 외부 훅)
+
+    public bool IsGameOver { get; private set; } = false;
+    private Coroutine gameOverCo;
 
     void Awake()
     {
@@ -952,4 +971,119 @@ public class FirstPersonController : MonoBehaviour
     }
 
 
+
+    public void BeginThreatTint(float fadeSeconds = -1f)
+    {
+        threatTintDesired = true;
+        float d = (fadeSeconds > 0f) ? fadeSeconds : defaultThreatFade;
+        RestartCoroutine(ref threatTintCoroutine, ThreatTintRoutine(enable: true, duration: d));
+    }
+
+    public void EndThreatTint(float fadeSeconds = -1f)
+    {
+        threatTintDesired = false;
+        float d = (fadeSeconds > 0f) ? fadeSeconds : defaultThreatFade;
+        RestartCoroutine(ref threatTintCoroutine, ThreatTintRoutine(enable: false, duration: d));
+    }
+
+    private IEnumerator ThreatTintRoutine(bool enable, float duration)
+    {
+        if (pointLight == null) yield break;
+        duration = Mathf.Max(0.001f, duration);
+
+        // 1) 고우선순위 효과(분홍 락/유리병 빨강) 중엔 '기다림'
+        while (isLightLocked || IsRedGlassActive)
+            yield return null;
+
+        // 2) 현재 색 → 목표 색으로 '서서히' 보간
+        Color target = enable ? threatTintColor : defaultLightColor;
+        Color start = pointLight.color;
+        float t = 0f;
+
+        while (t < 1f)
+        {
+            // 도중에 고우선순위(락/빨강) 시작되면 즉시 중단하고 다시 대기 → 끝난 후 잔여 페이드 이어감
+            if (isLightLocked || IsRedGlassActive)
+            {
+                // 대기
+                while (isLightLocked || IsRedGlassActive)
+                    yield return null;
+
+                // 재시작: 현재 색을 새 시작점으로
+                start = pointLight.color;
+                t = 0f;
+            }
+
+            t += Time.deltaTime / duration;
+            pointLight.color = Color.Lerp(start, target, t);
+            yield return null;
+        }
+
+        // 3) 최종 색 고정
+        pointLight.color = target;
+
+        // enable=false(복귀) 중 사용자가 다시 BeginThreatTint()를 호출했을 수 있으므로 코루틴 종료만
+        // (상태 의도는 threatTintDesired 플래그로 유지)
+    }
+
+    public void TriggerGameOver(string reason = "Caught")
+    {
+        Debug.Log($"[PLAYER] TriggerGameOver() called | reason={reason}, IsGameOver={IsGameOver}, CanMove={CanMove}");
+
+        if (IsGameOver)
+        {
+            Debug.Log("[PLAYER] TriggerGameOver() ignored: already in GameOver state");
+            return;
+        }
+
+        IsGameOver = true;
+        CanMove = false;
+
+        Debug.Log($"[PLAYER] GameOver flags set → IsGameOver={IsGameOver}, CanMove={CanMove}");
+
+        // 2) 사운드/외부 훅
+        if (footstepAudioSource) footstepAudioSource.Stop();
+        onGameOver?.Invoke();
+        Debug.Log("[PLAYER] Game Over: " + reason);
+
+        // 3) 후처리 시퀀스(페이드/사운드)
+        if (gameOverCo != null) StopCoroutine(gameOverCo);
+        gameOverCo = StartCoroutine(GameOverSequence());
+    }
+
+    private IEnumerator GameOverSequence()
+    {
+
+        Debug.Log("[PLAYER] GameOverSequence() start");
+
+        if (sfxSource && gameOverClip)
+            Debug.Log("[PLAYER] Playing gameOverClip");
+
+        if (gameOverOverlay)
+        {
+            Debug.Log($"[PLAYER] Fading overlay to 1 over {gameOverFadeSeconds:F2}s");
+        }
+        // (옵션) 사운드
+        if (sfxSource && gameOverClip)
+        {
+            sfxSource.clip = gameOverClip;
+            sfxSource.Play();
+        }
+
+        // (옵션) 화면 페이드
+        if (gameOverOverlay)
+        {
+            gameOverOverlay.gameObject.SetActive(true);
+            float t = 0f;
+            float start = gameOverOverlay.alpha;
+            float dur = Mathf.Max(0.001f, gameOverFadeSeconds);
+            while (t < 1f)
+            {
+                t += Time.deltaTime / dur;
+                gameOverOverlay.alpha = Mathf.Lerp(start, 1f, t);
+                yield return null;
+            }
+            gameOverOverlay.alpha = 1f;
+        }
+    }
 }
