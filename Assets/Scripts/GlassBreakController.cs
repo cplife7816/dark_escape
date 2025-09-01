@@ -92,9 +92,13 @@ public class GlassBreakController : MonoBehaviour, IDroppable
         }
     }
 
+    private float groundYFromSensor = float.NegativeInfinity;
+
     public void OnGroundSensorTriggered(Collider other)
     {
         if (isBroken) return;
+        // 센서가 닿은 지면의 Y를 추정: 콜라이더 경계 상단/하단 중 상황에 맞게 선택
+        groundYFromSensor = other.bounds.max.y; // 또는 .min.y, 환경에 맞게
         isBroken = true;
         StartCoroutine(DelayedBreak());
     }
@@ -102,17 +106,22 @@ public class GlassBreakController : MonoBehaviour, IDroppable
     private IEnumerator DelayedBreak()
     {
         yield return null;
+
+        // ★ 파손 직후, 파편들에게 지면 Y 주입
+        if (shatteredGlass != null)
+        {
+            var handlers = shatteredGlass.GetComponentsInChildren<GlassShardCollisionHandler>(true);
+            foreach (var h in handlers) h.SetGroundY(groundYFromSensor);
+        }
+
         BreakGlass();
         TriggerLight();
         PlayBreakSound();
-
         float duration = colorChangedSet.Contains(targetMaterialName) ? 0.5f : colorChangeDuration;
-        StartCoroutine(ChangeWhiteMaterialsOnly(duration)); 
-
+        StartCoroutine(ChangeWhiteMaterialsOnly(duration));
         colorChangedSet.Add(targetMaterialName);
 
-        StartCoroutine(DisableCollisionsAfterBreak());
-    
+        StartCoroutine(DisableCollisionsAfterBreak()); // 아래에서 게이트 체크
         ApplyNameToMatchingObjects();
     }
 
@@ -204,25 +213,35 @@ public class GlassBreakController : MonoBehaviour, IDroppable
 
     private IEnumerator DisableCollisionsAfterBreak()
     {
-        yield return new WaitForSeconds(2f);
+        yield return new WaitForSeconds(2f); // 기존 유지 (필요시 값만 늘려도 OK)
 
         if (shatteredGlass != null)
         {
-            Collider[] colliders = shatteredGlass.GetComponentsInChildren<Collider>(true);
-            foreach (var col in colliders)
-                col.enabled = false;
-
+            // 1) 파편 Rigidbody는 '준비된 것만' kinematic
             Rigidbody[] rigidbodies = shatteredGlass.GetComponentsInChildren<Rigidbody>(true);
             foreach (var r in rigidbodies)
+            {
+                var gate = r.GetComponent<GlassShardCollisionHandler>();
+                if (gate != null && !gate.ReadyToDisableNow())
+                    continue; // 아직 지면Y 미도달 → 패스
+
                 r.isKinematic = true;
+            }
+
+            // 2) 파편 Collider도 '준비된 것만' 비활성화
+            Collider[] colliders = shatteredGlass.GetComponentsInChildren<Collider>(true);
+            foreach (var col in colliders)
+            {
+                var gate = col.GetComponent<GlassShardCollisionHandler>();
+                if (gate != null && !gate.ReadyToDisableNow())
+                    continue;
+
+                col.enabled = false;
+            }
         }
 
-        if (mainCollider != null)
-            mainCollider.enabled = false;
-
-        if (rb != null)
-            rb.isKinematic = true;
-
+        if (mainCollider != null) mainCollider.enabled = false;
+        if (rb != null) rb.isKinematic = true;
     }
 
     private void ApplyNameToMatchingObjects()

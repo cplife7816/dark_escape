@@ -43,7 +43,7 @@ Material:
     m_Floats:
     - _BumpScale: 0.05
     - _DstBlend: 10
-    - _Glossiness: 0.782
+    - _Glossiness: 0
     - _GlossyReflections: 1
     - _Mode: 3
     - _ZWrite: 0

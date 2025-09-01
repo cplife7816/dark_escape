@@ -84,6 +84,10 @@ public class WalkerAI : MonoBehaviour
     [SerializeField] private float rageForgetAfter = 3f;         // 추가 감지 없으면 Rage 해제
     [SerializeField] private float playerMoveThresh = 0.05f;     // "움직임" 판정
 
+    [Header("Run Tuning (Rage)")]
+    [SerializeField] private float rageAngularSpeed = 7200f;   // 회전 즉시 반응에 가깝게
+    [SerializeField] private float rageAcceleration = 50f;     // 가속 빠르게
+    [SerializeField] private bool facePlayerEveryFrame = true; // 매 프레임 얼굴을 플레이어로
 
     [Header("Search Visuals")]
     [SerializeField] private Color searchFromColor = Color.white; // Patrol 시 색 (복귀 색)
@@ -94,7 +98,10 @@ public class WalkerAI : MonoBehaviour
     [Header("Player Catch (Game Over)")]
     [SerializeField] private float gameOverDistance = 0.5f; // Rage 중 이 거리 이하면 GameOver
 
+    private float savedAngularSpeed;
+    private float savedAcceleration;
 
+    private Coroutine screamFadeCo;
 
 
     // 내부 상태
@@ -334,19 +341,21 @@ public class WalkerAI : MonoBehaviour
     {
         if (visualRoot == null) return;
 
-        // 애니메이터 Speed가 0(Idle) 또는 4(Run)일 땐 비활성화
-        float animSpeed = animator ? animator.GetFloat(speedParam) : 0f;
-        const float EPS = 0.05f;
-        bool disableYaw = Mathf.Abs(animSpeed - 0f) < EPS || Mathf.Abs(animSpeed - 4f) < EPS;
-
-        if (disableYaw)
+        // Rage 상태에서는 시각 Yaw 오프셋을 "즉시" 비활성화하고 본체 회전에 스냅
+        if (state == WalkerState.Rage)
         {
-            // 본체 회전으로 복귀
-            visualRoot.rotation = Quaternion.Slerp(
-                visualRoot.rotation,
-                transform.rotation,
-                Mathf.Clamp01(Time.deltaTime * yawLerpSpeed)
-            );
+            visualRoot.rotation = transform.rotation; // ← 즉시
+            return;
+        }
+
+        // (기존) Idle/Run 구분치 대신, "달리기 근사"를 느슨하게 감지하고 빠르게 줄이기
+        float animSpeed = animator ? animator.GetFloat(speedParam) : 0f;
+        bool isRunLike = animSpeed >= 3.5f; // 달리기/전력질주 근사
+
+        if (isRunLike)
+        {
+            // 달리기 때도 스냅(보간 X)로 원래 회전으로 붙임
+            visualRoot.rotation = transform.rotation;
             return;
         }
 
@@ -491,44 +500,52 @@ public class WalkerAI : MonoBehaviour
             return;
         }
 
-        // ─ Rage: 기존 유지/추적/해제
+        // HandleAwarenessStates() 안 Rage 부분
         if (state == WalkerState.Rage)
         {
-            // (1) 플레이어 움직임 누적
-            if ((playerT.position - prevPlayerPos).magnitude > playerMoveThresh)
-                playerMoveTimer += Time.deltaTime;
+            bool playerIsCrouching = player != null && player.IsPlayerCrouching;
+
+            if (!playerIsCrouching)
+            {
+                // 🚀 플레이어가 걷거나 달리는 중이면 → 즉시 추적
+                SnapRunTo(playerT.position);
+            }
             else
-                playerMoveTimer = 0f;
-            prevPlayerPos = playerT.position;
-
-            // (2) 발소리 들리면 마지막 위치/시간 갱신
-            if (heardFootstepNow)
             {
-                lastHeardPlayerPos = playerT.position;
-                lastFootstepHeardTime = Time.time;
+                // 🕵️ 플레이어가 앉아있으면 기존 방식 유지 (빛/발소리 추적)
+                if ((playerT.position - prevPlayerPos).magnitude > playerMoveThresh)
+                    playerMoveTimer += Time.deltaTime;
+                else
+                    playerMoveTimer = 0f;
+                prevPlayerPos = playerT.position;
+
+                if (pRange > lastPlayerLightRange && pRange >= 1f)
+                {
+                    lastHeardPlayerPos = playerT.position;
+                    lastFootstepHeardTime = Time.time;
+                }
+
+                if (playerMoveTimer >= playerMoveSecondsToChase && Time.time >= nextChaseAllowedTime)
+                {
+                    SnapRunTo(lastHeardPlayerPos);
+                    nextChaseAllowedTime = Time.time + requeryFootstepInterval;
+                }
+
+                if (Time.time >= nextChaseAllowedTime && Time.time - lastFootstepHeardTime <= requeryFootstepInterval)
+                {
+                    SnapRunTo(lastHeardPlayerPos);
+                    nextChaseAllowedTime = Time.time + requeryFootstepInterval;
+                }
+
+                if (Time.time - lastFootstepHeardTime > rageForgetAfter)
+                {
+                    ExitRage();
+                }
             }
 
-            // (3) 추적 개시
-            if (playerMoveTimer >= playerMoveSecondsToChase && Time.time >= nextChaseAllowedTime)
-            {
-                SnapRunTo(lastHeardPlayerPos);
-                nextChaseAllowedTime = Time.time + requeryFootstepInterval;
-            }
-
-            // (4) 재평가
-            if (Time.time >= nextChaseAllowedTime && Time.time - lastFootstepHeardTime <= requeryFootstepInterval)
-            {
-                SnapRunTo(lastHeardPlayerPos);
-                nextChaseAllowedTime = Time.time + requeryFootstepInterval;
-            }
-
-            // (5) 추가 발소리 없으면 Rage 해제
-            if (Time.time - lastFootstepHeardTime > rageForgetAfter)
-            {
-                ExitRage();
-            }
             GameOverIfTouchingPlayer();
         }
+
     }
 
     private void EnterSearch()
@@ -556,7 +573,7 @@ public class WalkerAI : MonoBehaviour
         // 즉시 완전 정지
         StopAgentHard();
 
-        // 빛 고정: maxLightRange - 3
+        // 빛 고정: maxLightRange - 3 (기존 유지)
         float holdRange = Mathf.Max(0f, maxLightRange + rageLightHoldOffset);
         if (pointLight)
         {
@@ -571,16 +588,33 @@ public class WalkerAI : MonoBehaviour
             pointLight2.intensity = pointLightIntensity;
         }
 
+        // 오디오 전환
         StopBreathing();
         PlayScream();
 
-        // 초기화
+        // 플레이어 추적 초기화
         lastFootstepHeardTime = Time.time;
         nextChaseAllowedTime = Time.time;
         if (playerT) { lastHeardPlayerPos = playerT.position; prevPlayerPos = playerT.position; }
         playerMoveTimer = 0f;
 
+        // ★ Rage용 에이전트 즉시 회전/가속 튜닝
+        if (agent != null)
+        {
+            savedAngularSpeed = agent.angularSpeed;
+            savedAcceleration = agent.acceleration;
+
+            agent.autoBraking = false;                 // 급정지로 인한 방향지연 방지
+            agent.angularSpeed = rageAngularSpeed;     // 즉시 꺾임에 가깝게
+            agent.acceleration = rageAcceleration;     // 빠른 가속
+            agent.speed = Mathf.Max(chaseSpeed, 4f);
+            agent.isStopped = false;
+        }
+
+        // ★ 시각 Yaw 오프셋 즉시 OFF (스냅)
+        if (visualRoot) visualRoot.rotation = transform.rotation;
     }
+
 
     private void ExitRage()
     {
@@ -592,25 +626,26 @@ public class WalkerAI : MonoBehaviour
         if (pointLight)
         {
             if (lightCoroutine != null) StopCoroutine(lightCoroutine);
-            // range/intensity는 기존 로직 유지
         }
         if (pointLight2)
         {
             if (lightCoroutine2 != null) StopCoroutine(lightCoroutine2);
         }
 
-        // 순찰 재개
+        // 순찰 재개 및 에이전트 값 복원
         if (agent != null)
         {
             agent.isStopped = false;
             agent.speed = walkSpeed;
+            agent.autoBraking = true;                // 복원
+            agent.angularSpeed = savedAngularSpeed;  // 복원
+            agent.acceleration = savedAcceleration;  // 복원
         }
         GoToNearestWaypointReachable();
 
-        // ✨ Patrol 색으로 전환
+        // 색상 복귀
         StartLightColorFade(searchFromColor);
-        if (player != null) player.EndThreatTint(searchColorFade);   // 플레이어 라이트도 서서히 흰색 복귀
-
+        if (player != null) player.EndThreatTint(searchColorFade);
     }
 
 
@@ -686,7 +721,6 @@ public class WalkerAI : MonoBehaviour
 
     private void GameOverIfTouchingPlayer()
     {
-        // 참조가 비어 있으면 즉시 재획득 시도
         if (player == null || playerT == null)
         {
             player = FindObjectOfType<FirstPersonController>();
@@ -694,16 +728,16 @@ public class WalkerAI : MonoBehaviour
             if (playerT == null) return;
         }
 
-        // 수평(XZ) 거리만으로 판정 (y 높이 차이는 무시)
         Vector3 a = transform.position;
         Vector3 b = playerT.position;
         float distXZ = Vector2.Distance(new Vector2(a.x, a.z), new Vector2(b.x, b.z));
-        float dy = Mathf.Abs(a.y - b.y); // 참고용 출력만
-
         if (distXZ <= gameOverDistance)
         {
-            Debug.Log($"[WalkerAI] GAME OVER TRIGGER (Rage): distXZ={distXZ:F3} <= {gameOverDistance:F3} (Δy={dy:F3})");
-            player.TriggerGameOver("CaughtByWalker");
+            var finisher = GetComponent<WalkerGameOverFinisher>(); // 👈 적 전용 컴포넌트
+            if (finisher != null)
+                player.TriggerGameOver(finisher);
+            else
+                player.TriggerGameOver("CaughtByWalker"); // 안전장치
         }
     }
 
@@ -741,4 +775,41 @@ public class WalkerAI : MonoBehaviour
             screamSource.Stop();
     }
 
+    public void StopRageScream()
+    {
+        // 내부의 private StopScream()을 그대로 호출
+        // (screamSource.Stop()을 직접 써도 무방)
+        // StopScream();
+        if (screamSource != null && screamSource.isPlaying) screamSource.Stop();
+    }
+    /// <summary>rage 비명을 부드럽게 꺼준다.</summary>
+    public void FadeOutRageScream(float seconds = 0.6f)
+    {
+        if (screamSource == null) return;
+
+        if (screamFadeCo != null) StopCoroutine(screamFadeCo);
+        screamFadeCo = StartCoroutine(FadeOutScreamCo(seconds));
+    }
+
+    private IEnumerator FadeOutScreamCo(float seconds)
+    {
+        if (screamSource == null) yield break;
+
+        float dur = Mathf.Max(0.001f, seconds);
+        float startVol = screamSource.volume;
+
+        // 재생 중이 아니어도 볼륨만 0으로 내려도 안전
+        float t = 0f;
+        while (t < 1f)
+        {
+            t += Time.deltaTime / dur;
+            screamSource.volume = Mathf.Lerp(startVol, 0f, t);
+            yield return null;
+        }
+
+        // 완전히 정지 + 볼륨 복원
+        if (screamSource.isPlaying) screamSource.Stop();
+        screamSource.volume = startVol;
+        screamFadeCo = null;
+    }
 }

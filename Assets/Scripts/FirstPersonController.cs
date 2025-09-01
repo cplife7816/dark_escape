@@ -84,7 +84,7 @@ public class FirstPersonController : MonoBehaviour
     [SerializeField] private float crouch = -2f;
 
     [SerializeField] private KeyCode interactKey = KeyCode.E;
-    [SerializeField] private float interactionDistance = 2.5f;
+    [SerializeField] private float interactionDistance = 3f;
 
     [Header("Glass Effects Settings")]
     [SerializeField] private float redDuration = 5f;
@@ -137,7 +137,6 @@ public class FirstPersonController : MonoBehaviour
     [SerializeField] private Sprite defaultIcon;
 
 
-    [SerializeField] private float interactDistance = 3f;
 
     [SerializeField] private TextMeshProUGUI subtitleTextUI;
 
@@ -177,6 +176,16 @@ public class FirstPersonController : MonoBehaviour
 
     public bool IsGameOver { get; private set; } = false;
     private Coroutine gameOverCo;
+
+    [Header("Game Over Light Override")]
+    [SerializeField] private float gameOverLightRange = 6f;
+    [SerializeField] private float gameOverLightIntensity = 8f;
+    [SerializeField] private float gameOverLightFadeIn = 0.15f;
+
+    public bool IsPlayerCrouching => IsCrouching;
+
+    private Quaternion heldLocalRotation = Quaternion.identity;
+    private PickupOverride heldOverride = null;
 
     void Awake()
     {
@@ -522,6 +531,8 @@ public class FirstPersonController : MonoBehaviour
         if (isHoldingItem && heldObject != null)
         {
             heldObject.transform.position = holdPosition.position;
+            if (heldOverride != null)
+                heldObject.transform.localRotation = heldLocalRotation;
         }
     }
 
@@ -564,10 +575,14 @@ public class FirstPersonController : MonoBehaviour
                 if (heldObject.TryGetComponent(out PickupOverride overrideData))
                 {
                     // 회전 처리
-                    Quaternion itemRotation = (overrideData.customEulerRotation == Vector3.zero)
-                        ? Quaternion.Inverse(holdPosition.rotation) * heldObject.transform.rotation
-                        : Quaternion.Euler(overrideData.customEulerRotation);
-                    heldObject.transform.localRotation = itemRotation;
+                    Quaternion itemLocalRot = (overrideData.customEulerRotation == Vector3.zero)
+    ? Quaternion.identity
+    : Quaternion.Euler(overrideData.customEulerRotation);
+                    heldObject.transform.localRotation = itemLocalRot;
+
+                    // ✅ 회전 고정 캐시
+                    heldLocalRotation = itemLocalRot;
+                    heldOverride = overrideData;
 
                     // 위치 보정값 적용
                     Vector3 offset = overrideData.holdOffset;
@@ -643,6 +658,8 @@ public class FirstPersonController : MonoBehaviour
             holdPosition.localPosition = new Vector3(0f, 0f, heldObjectHoldZ);
 
         }
+        heldOverride = null;
+        heldLocalRotation = Quaternion.identity;
     }
 
 
@@ -654,7 +671,7 @@ public class FirstPersonController : MonoBehaviour
 
         Sprite newIcon = defaultIcon; // 기본값은 항상 흰 점
 
-        if (Physics.Raycast(ray, out RaycastHit hit, interactDistance, mask))
+        if (Physics.Raycast(ray, out RaycastHit hit, interactionDistance, mask))
         {
             string tag = hit.collider.tag;
 
@@ -752,7 +769,7 @@ public class FirstPersonController : MonoBehaviour
         int mask = ~LayerMask.GetMask("IgnorePlayerRay");
         Ray ray = new Ray(playerCamera.transform.position, playerCamera.transform.forward);
 
-        if (Physics.Raycast(ray, out RaycastHit hit, interactDistance, mask))
+        if (Physics.Raycast(ray, out RaycastHit hit, interactionDistance, mask))
         {
             SubtitleObject subtitleObject = hit.collider.GetComponentInParent<SubtitleObject>();
             if (subtitleObject != null)
@@ -1028,49 +1045,44 @@ public class FirstPersonController : MonoBehaviour
 
     public void TriggerGameOver(string reason = "Caught")
     {
-        Debug.Log($"[PLAYER] TriggerGameOver() called | reason={reason}, IsGameOver={IsGameOver}, CanMove={CanMove}");
+        // 기존 가드
+        if (IsGameOver) return;
+        TriggerGameOver(null, reason);
+    }
 
-        if (IsGameOver)
-        {
-            Debug.Log("[PLAYER] TriggerGameOver() ignored: already in GameOver state");
-            return;
-        }
+    public void TriggerGameOver(IGameOverFinisher finisher, string fallbackReason = "Caught")
+    {
+        if (IsGameOver) return;
 
         IsGameOver = true;
         CanMove = false;
 
-        Debug.Log($"[PLAYER] GameOver flags set → IsGameOver={IsGameOver}, CanMove={CanMove}");
-
-        // 2) 사운드/외부 훅
+        // 발소리 등 정지(필요 시)
         if (footstepAudioSource) footstepAudioSource.Stop();
         onGameOver?.Invoke();
-        Debug.Log("[PLAYER] Game Over: " + reason);
 
-        // 3) 후처리 시퀀스(페이드/사운드)
         if (gameOverCo != null) StopCoroutine(gameOverCo);
-        gameOverCo = StartCoroutine(GameOverSequence());
+        gameOverCo = StartCoroutine(GameOverSequenceWithFinisher(finisher, fallbackReason));
     }
 
-    private IEnumerator GameOverSequence()
+    private IEnumerator GameOverSequenceWithFinisher(IGameOverFinisher finisher, string fallbackReason)
     {
-
-        Debug.Log("[PLAYER] GameOverSequence() start");
-
-        if (sfxSource && gameOverClip)
-            Debug.Log("[PLAYER] Playing gameOverClip");
-
-        if (gameOverOverlay)
+        // 2-3) 캐릭터 이동을 완전히 고정(카메라 연출 방해 제거)
+        HardLockCharacter();   // ★ 아래에 유틸 추가
+        LockLightForGameOver(gameOverLightRange, gameOverLightIntensity, gameOverLightFadeIn);
+        // 2-4) 적 전용 연출이 있다면 먼저 재생
+        if (finisher != null)
         {
-            Debug.Log($"[PLAYER] Fading overlay to 1 over {gameOverFadeSeconds:F2}s");
+            yield return StartCoroutine(finisher.Play(this));
         }
-        // (옵션) 사운드
+
+        // 2-5) 공통 후처리(페이드/사운드)는 기존과 동일
         if (sfxSource && gameOverClip)
         {
             sfxSource.clip = gameOverClip;
             sfxSource.Play();
         }
 
-        // (옵션) 화면 페이드
         if (gameOverOverlay)
         {
             gameOverOverlay.gameObject.SetActive(true);
@@ -1085,5 +1097,53 @@ public class FirstPersonController : MonoBehaviour
             }
             gameOverOverlay.alpha = 1f;
         }
+
+        // 여기서 씬 전환/메뉴 열기 등은 onGameOver에 이미 연결됐다고 가정
     }
+
+    // 2-6) 연출 동안 이동계 완전 고정(간섭 방지)
+    private void HardLockCharacter()
+    {
+        // 캐릭터컨트롤러 물리 이동 차단
+        var cc = GetComponent<CharacterController>();
+        if (cc != null) cc.enabled = false;
+
+        // 마우스/키보드 입력은 CanMove=false로 이미 차단됨
+        // 필요하면 커서 락/감추기 유지
+    }
+
+    // (선택) 연출이 끝난 뒤 다시 cc를 살릴 일은 일반적으로 없음(게임오버).
+    // 만약 리트라이 등에서 재활성화가 필요하면 public 메서드로 되살리는 기능을 따로 두면 됨.
+
+    // 연출에서 카메라/Transform이 필요하면 접근용 프로퍼티 하나 제공
+    public Camera PlayerCamera => playerCamera;
+
+    private IEnumerator LerpLightTo(float targetRange, float targetIntensity, float duration)
+    {
+        if (pointLight == null) yield break;
+        duration = Mathf.Max(0.001f, duration);
+
+        float startRange = pointLight.range;
+        float startIntensity = pointLight.intensity;
+        float t = 0f;
+
+        while (t < 1f)
+        {
+            t += Time.deltaTime / duration;
+            pointLight.range = Mathf.Lerp(startRange, targetRange, t);
+            pointLight.intensity = Mathf.Lerp(startIntensity, targetIntensity, t);
+            yield return null;
+        }
+        pointLight.range = targetRange;
+        pointLight.intensity = targetIntensity;
+    }
+
+    public void LockLightForGameOver(float range, float intensity, float fadeIn = 0.15f)
+    {
+        if (pointLight == null) return;
+        isLightLocked = true;                       // ← 다른 효과가 건드리지 못하게 잠금
+        if (lightCoroutine != null) StopCoroutine(lightCoroutine);
+        StartCoroutine(LerpLightTo(range, intensity, fadeIn));
+    }
+
 }
