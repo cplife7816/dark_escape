@@ -503,6 +503,14 @@ public class WalkerAI : MonoBehaviour
         // HandleAwarenessStates() 안 Rage 부분
         if (state == WalkerState.Rage)
         {
+            // 🔥 외부 명령 오버라이드: 웅크림/정지와 관계없이 즉시 추격
+            if (Time.time < externalChaseOverrideEnd)
+            {
+                if (playerT) SnapRunTo(playerT.position);
+                GameOverIfTouchingPlayer();
+                return; // 이하의 '웅크림이면 대기' 로직 우회
+            }
+
             bool playerIsCrouching = player != null && player.IsPlayerCrouching;
 
             if (!playerIsCrouching)
@@ -812,4 +820,53 @@ public class WalkerAI : MonoBehaviour
         screamSource.volume = startVol;
         screamFadeCo = null;
     }
+
+    // WalkerAI.cs — 클래스 내부 어딘가(예: 하단) 추가
+
+    [Header("External Command")]
+    [SerializeField] private float externalChaseOverrideSeconds = 2f;
+    private float externalChaseOverrideEnd = -999f;
+
+    /// <summary>
+    /// 외부(미믹 등)에서 강제 Rage + 즉시 추격을 명령. overrideSeconds 동안 플레이어 상태 무시.
+    /// </summary>
+    public void ForceEnterRageAndChase(Transform target, bool snapImmediate = true, float overrideSeconds = -1f)
+    {
+        // ✅ 수신 로그
+        Debug.Log($"[WALKER:{name}] <SIGNAL> Received from Mimic. target={(target ? target.name : "null")}, snap={snapImmediate}, override={(overrideSeconds > 0f ? overrideSeconds : externalChaseOverrideSeconds)}s");
+
+        if (!target) return;
+
+        // 플레이어 참조 보강
+        if (player == null) player = FindObjectOfType<FirstPersonController>();
+        playerT = (player != null) ? player.transform : target;
+
+        // Rage 진입 및 초기화(사운드/라이트/에이전트 튜닝 포함)
+        Debug.Log($"[WALKER:{name}] EnterRage() by external signal");
+        StartLightColorFade(searchColor);
+        if (player != null) player.BeginThreatTint(searchColorFade);
+
+        EnterRage(); // 기존 코드 그대로
+
+        // 즉시 목적지 설정
+        if (playerT != null)
+        {
+            lastHeardPlayerPos = playerT.position;
+            prevPlayerPos = playerT.position;
+            if (snapImmediate)
+            {
+                Debug.Log($"[WALKER:{name}] SnapRunTo({playerT.position})");
+                SnapRunTo(playerT.position);
+            }
+        }
+
+        // 상태 무시 오버라이드 시간 설정
+        float dur = (overrideSeconds > 0f) ? overrideSeconds : externalChaseOverrideSeconds;
+        externalChaseOverrideEnd = Time.time + dur;
+        Debug.Log($"[WALKER:{name}] Forced-chase window: {dur:0.00}s (until t={externalChaseOverrideEnd:0.00})");
+    }
+
+
+
+
 }

@@ -11,6 +11,7 @@ TagManager:
   - Driver
   - Interact
   - FOOTSTEPS/ROCK
+  - Whisper
   layers:
   - Default
   - TransparentFX
@@ -20,7 +21,7 @@ TagManager:
   - UI
   - IgnorePlayerRay
   - Wall
-  - 
+  - Whisper
   - 
   - 
   - 
