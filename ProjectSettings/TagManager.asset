@@ -12,6 +12,7 @@ TagManager:
   - Interact
   - FOOTSTEPS/ROCK
   - Whisper
+  - FOOTSTEPS/WATER
   layers:
   - Default
   - TransparentFX

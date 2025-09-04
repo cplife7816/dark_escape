@@ -4,6 +4,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using UnityEngine.Events;
+using LowPolyWater;
 
 public class FirstPersonController : MonoBehaviour
 {
@@ -60,12 +61,15 @@ public class FirstPersonController : MonoBehaviour
     [SerializeField] private AudioClip[] rockClips = default;
     [SerializeField] private AudioClip[] metalClips = default;
     [SerializeField] private AudioClip[] grassClips = default;
+    [SerializeField] private AudioClip[] waterClips = default;
     [SerializeField] private AudioClip[] rockLandClips = default;
     [SerializeField] private AudioClip[] metalLandClips = default;
     [SerializeField] private AudioClip[] grassLandClips = default;
+    [SerializeField] private AudioClip[] waterLandClips = default;
     [SerializeField] private AudioClip[] rockJumpClips = default;
     [SerializeField] private AudioClip[] metalJumpClips = default;
     [SerializeField] private AudioClip[] grassJumpClips = default;
+    [SerializeField] private AudioClip[] waterJumpClips = default;
     [SerializeField] private GameObject leftFootprintPrefab;
     [SerializeField] private GameObject rightFootprintPrefab;
 
@@ -187,7 +191,9 @@ public class FirstPersonController : MonoBehaviour
     private Quaternion heldLocalRotation = Quaternion.identity;
     private PickupOverride heldOverride = null;
 
-    void Awake()
+ 
+
+void Awake()
     {
         playerCamera = GetComponentInChildren<Camera>();
         characterController = GetComponent<CharacterController>();
@@ -323,6 +329,9 @@ public class FirstPersonController : MonoBehaviour
                         break;
                     case "FOOTSTEPS/METAL":
                         footstepAudioSource.PlayOneShot(metalClips[Random.Range(0, metalClips.Length - 1)]);
+                        break;
+                    case "FOOTSTEPS/WATER":
+                        footstepAudioSource.PlayOneShot(waterClips[Random.Range(0, waterClips.Length - 1)]);
                         break;
                     default:
                         footstepAudioSource.PlayOneShot(rockClips[Random.Range(0, rockClips.Length - 1)]);
@@ -1146,4 +1155,17 @@ public class FirstPersonController : MonoBehaviour
         StartCoroutine(LerpLightTo(range, intensity, fadeIn));
     }
 
+    public void ApplyWaterRangeBonus(float bonus)
+    {
+        // 기본값 + 보너스로 즉시 적용
+        float baseRange = defaultMaxLightRange; // ← 기존에 저장해둔 기본값
+        maxLightRange = baseRange + bonus;
+        Debug.Log($"[FPC] Water ON → maxLightRange = {maxLightRange} (base={baseRange}, bonus={bonus})");
+    }
+
+    public void ClearWaterRangeBonus()
+    {
+        maxLightRange = defaultMaxLightRange;
+        Debug.Log($"[FPC] Water OFF → maxLightRange = {maxLightRange}");
+    }
 }
