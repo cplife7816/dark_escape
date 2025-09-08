@@ -13,6 +13,7 @@ TagManager:
   - FOOTSTEPS/ROCK
   - Whisper
   - FOOTSTEPS/WATER
+  - Card
   layers:
   - Default
   - TransparentFX

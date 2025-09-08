@@ -1,39 +1,39 @@
-using UnityEngine;
+ï»¿using UnityEngine;
 using System.Collections;
 
 namespace PxP
 {
     [RequireComponent(typeof(MeshFilter))]
     [DisallowMultipleComponent]
-    public class WasherRotator : MonoBehaviour
+    public class WasherRotator : MonoBehaviour, IElectedReceiver // âœ… isElected ì‹ í˜¸ ìˆ˜ì‹ 
     {
         [Header("Rotation")]
-        [Tooltip("ÃÊ´ç È¸Àü °¢µµ (deg/sec). À½¼ö¸é ±âº» ¹æÇâÀÌ ¹İ½Ã°è")]
+        [Tooltip("ì´ˆë‹¹ íšŒì „ ê°ë„ (deg/sec). ìŒìˆ˜ë©´ ê¸°ë³¸ ë°©í–¥ì´ ë°˜ì‹œê³„")]
         [SerializeField] private float rotationSpeedDegPerSec = 180f;
 
-        [Tooltip("ÇÑ »çÀÌÅ¬¿¡¼­ ¸î ¹ÙÄû¸¦ µ¹Áö (>=1)")]
+        [Tooltip("í•œ ì‚¬ì´í´ì—ì„œ ëª‡ ë°”í€´ë¥¼ ëŒì§€ (>=1)")]
         [Min(1)]
         [SerializeField] private int rotationsPerCycle = 5;
 
         [Header("Pauses")]
-        [Tooltip("ÇÑ ¹ÙÄû(360¡Æ)¸¦ ¸¶Ä¥ ¶§¸¶´Ù ½¬´Â ½Ã°£(ÃÊ)")]
+        [Tooltip("í•œ ë°”í€´(360Â°)ë¥¼ ë§ˆì¹  ë•Œë§ˆë‹¤ ì‰¬ëŠ” ì‹œê°„(ì´ˆ)")]
         [SerializeField] private float shortPauseSeconds = 0.5f;
 
-        [Tooltip("È¸Àü¼ö¸¸Å­ ´Ù µ¹°í ³­ µÚ ½¬´Â ½Ã°£(ÃÊ)")]
+        [Tooltip("íšŒì „ìˆ˜ë§Œí¼ ë‹¤ ëŒê³  ë‚œ ë’¤ ì‰¬ëŠ” ì‹œê°„(ì´ˆ)")]
         [SerializeField] private float longPauseSeconds = 2.0f;
 
         [Header("One-Shot Sounds (Optional)")]
-        [Tooltip("ÇÑ ¹ÙÄû ½ÃÀÛ ½Ã ·£´ı Àç»ıµÇ´Â È¿°úÀ½µé")]
+        [Tooltip("í•œ ë°”í€´ ì‹œì‘ ì‹œ ëœë¤ ì¬ìƒë˜ëŠ” íš¨ê³¼ìŒë“¤")]
         [SerializeField] private AudioClip[] rotationClips;
 
-        [Tooltip("¿ø¼¦ È¿°úÀ½À» Àç»ıÇÒ AudioSource (¾øÀ¸¸é ÀÚµ¿ Ãß°¡)")]
+        [Tooltip("ì›ìƒ· íš¨ê³¼ìŒì„ ì¬ìƒí•  AudioSource (ì—†ìœ¼ë©´ ìë™ ì¶”ê°€)")]
         [SerializeField] private AudioSource audioSource;
 
         [Header("Continuous Loop Sound (Optional)")]
-        [Tooltip("¹«ÇÑ ¹İº¹À¸·Î Àç»ıÇÒ ·çÇÁ¿ë AudioSource (¾øÀ¸¸é ÀÚµ¿ Ãß°¡)")]
+        [Tooltip("ë¬´í•œ ë°˜ë³µìœ¼ë¡œ ì¬ìƒí•  ë£¨í”„ìš© AudioSource (ì—†ìœ¼ë©´ ìë™ ì¶”ê°€)")]
         [SerializeField] private AudioSource loopAudioSource;
 
-        [Tooltip("¹«ÇÑ ¹İº¹À¸·Î Àç»ıÇÒ ¼Ò¸® Å¬¸³")]
+        [Tooltip("ë¬´í•œ ë°˜ë³µìœ¼ë¡œ ì¬ìƒí•  ì†Œë¦¬ í´ë¦½")]
         [SerializeField] private AudioClip loopClip;
 
         [Range(0f, 1f)]
@@ -42,8 +42,22 @@ namespace PxP
         [SerializeField] private bool playLoopOnEnable = true;
 
         [Header("Direction Inversion (Per Cycle)")]
-        [Tooltip("»çÀÌÅ¬ ³»¿¡¼­ ÀÌ È½¼ö¸¸Å­ È¸ÀüÇÑ 'ÀÌÈÄ'ºÎÅÍ ¹æÇâÀ» ¹Ù²Ş.\n-1ÀÌ¸é ¿ªÀü ¾øÀ½.\n¿¹) rotationsPerCycle=5, °ª=2 ¡æ 2È¸ ¿ø·¡ ¹æÇâ, ÀÌÈÄ 3È¸ ¹İ´ë ¹æÇâ")]
+        [Tooltip("ì‚¬ì´í´ ë‚´ì—ì„œ ì´ íšŸìˆ˜ë§Œí¼ íšŒì „í•œ 'ì´í›„'ë¶€í„° ë°©í–¥ì„ ë°”ê¿ˆ.\n-1ì´ë©´ ì—­ì „ ì—†ìŒ.\nì˜ˆ) rotationsPerCycle=5, ê°’=2 â†’ 2íšŒ ì›ë˜ ë°©í–¥, ì´í›„ 3íšŒ ë°˜ëŒ€ ë°©í–¥")]
         [SerializeField] private int reverseAfterRotations = -1;
+
+        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        [Header("Power / isElected")]
+        [Tooltip("ì´ˆê¸° ì „ì› ìƒíƒœ (ëŸ°íƒ€ì„ì—” SetElected()ë¡œ ì œì–´)")]
+        [SerializeField] private bool isElected = false;
+
+        [Header("Run Light (while isElected=true)")]
+        [SerializeField] private Light runLight;                 // âœ” ë„¤ê°€ ì§€ì •
+        [SerializeField] private float runLightRange = 6f;       // âœ” ë„¤ê°€ ì§€ì •
+        [SerializeField] private float runLightIntensity = 2.5f; // âœ” ë„¤ê°€ ì§€ì •
+        [SerializeField, Min(0.1f)] private float lightChangeSpeed = 5f;
+
+        private Coroutine lightCo;
+        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         private MeshFilter meshFilter;
         private MeshCollider meshCollider;
@@ -54,7 +68,7 @@ namespace PxP
             meshFilter = GetComponent<MeshFilter>();
             meshCollider = GetComponent<MeshCollider>();
 
-            // ¿ø¼¦ Àç»ı¿ë ¿Àµğ¿À¼Ò½º
+            // ì›ìƒ· ì¬ìƒìš© ì˜¤ë””ì˜¤ì†ŒìŠ¤
             if (audioSource == null)
             {
                 audioSource = GetComponent<AudioSource>();
@@ -65,7 +79,7 @@ namespace PxP
                 }
             }
 
-            // ·çÇÁ Àç»ı¿ë ¿Àµğ¿À¼Ò½º
+            // ë£¨í”„ ì¬ìƒìš© ì˜¤ë””ì˜¤ì†ŒìŠ¤
             if (loopAudioSource == null)
                 loopAudioSource = gameObject.AddComponent<AudioSource>();
 
@@ -73,11 +87,19 @@ namespace PxP
             loopAudioSource.loop = true;
             loopAudioSource.volume = loopVolume;
             loopAudioSource.clip = loopClip;
+
+            // ë¼ì´íŠ¸ ì´ˆê¸°ê°’ ì•ˆì „í•˜ê²Œ 0
+            if (runLight)
+            {
+                runLight.range = isElected ? runLightRange : 0f;
+                runLight.intensity = isElected ? runLightIntensity : 0f;
+            }
         }
 
         private void OnEnable()
         {
-            if (playLoopOnEnable && loopClip != null && loopAudioSource != null && !loopAudioSource.isPlaying)
+            // ì „ì›ì´ ì¼œì ¸ìˆì„ ë•Œë§Œ ë£¨í”„ ì‚¬ìš´ë“œ ìë™ ì¬ìƒ
+            if (isElected && playLoopOnEnable && loopClip != null && loopAudioSource != null && !loopAudioSource.isPlaying)
                 loopAudioSource.Play();
 
             if (loopRoutine == null)
@@ -94,6 +116,41 @@ namespace PxP
 
             if (loopAudioSource != null && loopAudioSource.isPlaying)
                 loopAudioSource.Stop();
+
+            if (lightCo != null)
+            {
+                StopCoroutine(lightCo);
+                lightCo = null;
+            }
+        }
+
+        // === IElectedReceiver: ìŠ¤ìœ„ì¹˜/ì „ì›ìœ¼ë¡œë¶€í„° ì‹ í˜¸ ìˆ˜ì‹  ===
+        public void SetElected(bool value)
+        {
+            if (isElected == value) return;
+            isElected = value;
+
+            // ë£¨í”„ ì‚¬ìš´ë“œ on/off
+            if (loopAudioSource != null)
+            {
+                if (isElected)
+                {
+                    if (loopClip != null && !loopAudioSource.isPlaying)
+                        loopAudioSource.Play();
+                }
+                else
+                {
+                    if (loopAudioSource.isPlaying)
+                        loopAudioSource.Stop();
+                }
+            }
+
+            // ëŸ¬ë‹ ë¼ì´íŠ¸ on/off (ë¶€ë“œëŸ¬ìš´ ì „í™˜)
+            if (runLight)
+            {
+                if (lightCo != null) StopCoroutine(lightCo);
+                lightCo = StartCoroutine(CoDriveRunLight(isElected));
+            }
         }
 
         private IEnumerator WasherLoop()
@@ -106,37 +163,69 @@ namespace PxP
             if (Mathf.Approximately(baseSpeedAbs, 0f))
                 yield break;
 
-            // ÃÊ±â ±âº» ¹æÇâ(ºÎÈ£). »çÀÌÅ¬ Á¾·á ½Ã Ç×»ó ÀÌ ¹æÇâÀ¸·Î º¹±¸µÊ.
+            // ì´ˆê¸° ê¸°ë³¸ ë°©í–¥(ë¶€í˜¸). ì‚¬ì´í´ ì¢…ë£Œ ì‹œ í•­ìƒ ì´ ë°©í–¥ìœ¼ë¡œ ë³µêµ¬ë¨.
             int baseSign = (rotationSpeedDegPerSec >= 0f) ? 1 : -1;
 
             while (true)
             {
-                // »çÀÌÅ¬º°·Î ¿ªÀü ¿©ºÎ/½ÃÁ¡À» °è»ê
+                // ì „ì› êº¼ì ¸ìˆìœ¼ë©´ ëŒ€ê¸°
+                if (!isElected)
+                {
+                    yield return null;
+                    continue;
+                }
+
+                // ì‚¬ì´í´ë³„ë¡œ ì—­ì „ ì—¬ë¶€/ì‹œì ì„ ê³„ì‚°
                 bool invertEnabledThisCycle = (reverseAfterRotations >= 0) && (reverseAfterRotations < perCycle);
 
                 for (int i = 0; i < perCycle; i++)
                 {
-                    // i¹øÂ° È¸Àü(0-based). reverseAfterRotations ÀÌÈÄºÎÅÍ ¹İ´ë·Î.
+                    if (!isElected) break; // ì¤‘ê°„ì— ì „ì› êº¼ì§€ë©´ ì¦‰ì‹œ ì¤‘ë‹¨
+
+                    // ië²ˆì§¸ íšŒì „(0-based). reverseAfterRotations ì´í›„ë¶€í„° ë°˜ëŒ€ë¡œ.
                     bool useInverted = invertEnabledThisCycle && (i >= reverseAfterRotations);
                     int effectiveSign = useInverted ? -baseSign : baseSign;
 
-                    // ÇÑ ¹ÙÄû(360¡Æ) È¸Àü
+                    // í•œ ë°”í€´(360Â°) íšŒì „ (ì¤‘ê°„ì— êº¼ì§€ë©´ ì¦‰ì‹œ íƒˆì¶œ)
                     yield return RotateOnce360(effectiveSign * baseSpeedAbs);
+                    if (!isElected) break;
 
-                    if (shortWait > 0f) yield return new WaitForSeconds(shortWait);
+                    if (shortWait > 0f)
+                    {
+                        float t = 0f;
+                        while (t < shortWait)
+                        {
+                            if (!isElected) break;
+                            t += Time.deltaTime;
+                            yield return null;
+                        }
+                        if (!isElected) break;
+                    }
                 }
 
-                // »çÀÌÅ¬ Á¾·á ¡æ ÀÚµ¿À¸·Î ´ÙÀ½ »çÀÌÅ¬¿¡¼­ baseSign º¹±¸(ÄÚµå»ó baseSignÀ» À¯Áö)
-                if (longWait > 0f) yield return new WaitForSeconds(longWait);
+                // ì‚¬ì´í´ ì¢…ë£Œ ëŒ€ê¸°
+                if (isElected && longWait > 0f)
+                {
+                    float t = 0f;
+                    while (t < longWait)
+                    {
+                        if (!isElected) break;
+                        t += Time.deltaTime;
+                        yield return null;
+                    }
+                }
             }
         }
 
         /// <summary>
-        /// Á¤È®È÷ 360¡Æ ZÃà È¸Àü(ÇÁ·¹ÀÓ µå¸®ÇÁÆ® ¹æÁö) + ½ÃÀÛ ½Ã ·£´ı ¿ø¼¦ Àç»ı
+        /// ì •í™•íˆ 360Â° Zì¶• íšŒì „(í”„ë ˆì„ ë“œë¦¬í”„íŠ¸ ë°©ì§€) + ì‹œì‘ ì‹œ ëœë¤ ì›ìƒ· ì¬ìƒ
+        /// isElected=falseë¡œ ë°”ë€Œë©´ ì¦‰ì‹œ ì¤‘ë‹¨
         /// </summary>
         private IEnumerator RotateOnce360(float signedDegPerSec)
         {
-            // ·£´ı ¿ø¼¦
+            if (!isElected) yield break;
+
+            // ëœë¤ ì›ìƒ· (ì „ì› ì¼œì ¸ ìˆì„ ë•Œë§Œ)
             if (rotationClips != null && rotationClips.Length > 0 && audioSource != null)
             {
                 int idx = Random.Range(0, rotationClips.Length);
@@ -152,6 +241,8 @@ namespace PxP
 
             while (remaining > 0f)
             {
+                if (!isElected) yield break; // ğŸ”Œ ì „ì› ëŠê¸°ë©´ ì¦‰ì‹œ ì¤‘ë‹¨
+
                 float step = speedAbs * Time.deltaTime;
                 if (step > remaining) step = remaining;
 
@@ -166,6 +257,31 @@ namespace PxP
                 yield return null;
             }
         }
+
+        // â”€â”€ Light smooth drive â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        private IEnumerator CoDriveRunLight(bool turnOn)
+        {
+            float goalRange = turnOn ? runLightRange : 0f;
+            float goalInt = turnOn ? runLightIntensity : 0f;
+
+            while (runLight &&
+                   (Mathf.Abs(runLight.range - goalRange) > 0.02f ||
+                    Mathf.Abs(runLight.intensity - goalInt) > 0.02f))
+            {
+                runLight.range = Mathf.MoveTowards(runLight.range, goalRange, lightChangeSpeed * Time.deltaTime);
+                runLight.intensity = Mathf.MoveTowards(runLight.intensity, goalInt, lightChangeSpeed * Time.deltaTime);
+                yield return null;
+            }
+
+            if (runLight)
+            {
+                runLight.range = goalRange;
+                runLight.intensity = goalInt;
+            }
+
+            lightCo = null;
+        }
+        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         #region Public Setters
         public void SetRotationSpeedDegPerSec(float v) => rotationSpeedDegPerSec = v;
@@ -196,7 +312,9 @@ namespace PxP
             if (loopAudioSource != null) loopAudioSource.volume = loopVolume;
         }
         public void SetPlayLoopOnEnable(bool on) => playLoopOnEnable = on;
-        public void SetReverseAfterRotations(int v) => reverseAfterRotations = v;
+
+        // ì™¸ë¶€ì—ì„œ ì „ì› ì œì–´í•˜ê³  ì‹¶ì„ ë•Œ(ìŠ¤ìœ„ì¹˜ ë§ê³ ë„ ì‚¬ìš© ê°€ëŠ¥)
+        public void SetPower(bool on) => SetElected(on);
         #endregion
 
 #if UNITY_EDITOR
@@ -204,10 +322,10 @@ namespace PxP
         {
             if (rotationsPerCycle < 1) rotationsPerCycle = 1;
 
-            // -1 Çã¿ë(¿ªÀü ¾øÀ½). -1 ¹Ì¸¸ÀÌ¸é -1·Î, 0 ÀÌ»óÀÌ¸é 0~perCycle·Î Å¬·¥ÇÁ.
+            // -1 í—ˆìš©(ì—­ì „ ì—†ìŒ). -1 ë¯¸ë§Œì´ë©´ -1ë¡œ, 0 ì´ìƒì´ë©´ 0~perCycleë¡œ í´ë¨í”„.
             if (reverseAfterRotations < -1) reverseAfterRotations = -1;
             if (reverseAfterRotations >= 0 && reverseAfterRotations > rotationsPerCycle)
-                reverseAfterRotations = rotationsPerCycle; // perCycle°ú °°À¸¸é "³²Àº 0È¸"¶ó »ç½Ç»ó ¿ªÀü ¾øÀ½
+                reverseAfterRotations = rotationsPerCycle; // perCycleê³¼ ê°™ìœ¼ë©´ ì‚¬ì‹¤ìƒ ì—­ì „ ì—†ìŒ
         }
 #endif
     }

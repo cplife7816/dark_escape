@@ -1,12 +1,12 @@
-// MimicCommandOnInteract.cs
+ï»¿// MimicCommandOnInteract.cs
 using System.Collections.Generic;
 using UnityEngine;
 
 public class MimicCommandOnInteract : MonoBehaviour
 {
     [Header("Elected Gate")]
-    [SerializeField] private bool isElected = true;     // ¡ç ÇÃ·¡±×
-    [SerializeField] private float overrideChaseSeconds = 3f; // ÇÃ·¹ÀÌ¾î »óÅÂ ¹«½Ã Ãß°İ À¯Áö½Ã°£
+    [SerializeField] private bool isElected = true;     // â† í”Œë˜ê·¸
+    [SerializeField] private float overrideChaseSeconds = 3f; // í”Œë ˆì´ì–´ ìƒíƒœ ë¬´ì‹œ ì¶”ê²© ìœ ì§€ì‹œê°„
 
     [Header("Walker Search")]
     [SerializeField] private float commandRadius = 25f;
@@ -20,25 +20,30 @@ public class MimicCommandOnInteract : MonoBehaviour
     [SerializeField] private float pulseIntensity = 6f;
     [SerializeField] private float pulseRange = 5f;
 
-    // ¿ÜºÎ¿¡¼­ Åä±ÛÇÏ°í ½ÍÀ» ¼ö ÀÖÀ¸´Ï ÇÁ·ÎÆÛÆ¼µµ Á¦°ø
+    public void SetElected(bool value)
+    {
+        isElected = value;
+    }
+
+    // ì™¸ë¶€ì—ì„œ í† ê¸€í•˜ê³  ì‹¶ì„ ìˆ˜ ìˆìœ¼ë‹ˆ í”„ë¡œí¼í‹°ë„ ì œê³µ
     public bool IsElected { get => isElected; set => isElected = value; }
 
     public void InteractByPlayer(FirstPersonController player)
     {
-        // (1) ¼±°Å ¿©ºÎ ÇÃ·¡±× Ã¼Å©: false¸é ¿ÏÀü ¹«½Ã
+        // (1) ì„ ê±° ì—¬ë¶€ í”Œë˜ê·¸ ì²´í¬: falseë©´ ì™„ì „ ë¬´ì‹œ
         if (!isElected || player == null) return;
 
-        // (2) È¿°ú(¼Ò¸®+¶óÀÌÆ®)
+        // (2) íš¨ê³¼(ì†Œë¦¬+ë¼ì´íŠ¸)
         PlayCommandEffects();
 
-        // (3) ¿öÄ¿ ¼öÁı
+        // (3) ì›Œì»¤ ìˆ˜ì§‘
         List<WalkerAI> targets = FindWalkersAround();
 
-        // (4) °­Á¦ Rage + Áï½Ã Ãß°İ(ÇÃ·¹ÀÌ¾î »óÅÂ ¹«½Ã ¿À¹ö¶óÀÌµå Æ÷ÇÔ)
+        // (4) ê°•ì œ Rage + ì¦‰ì‹œ ì¶”ê²©(í”Œë ˆì´ì–´ ìƒíƒœ ë¬´ì‹œ ì˜¤ë²„ë¼ì´ë“œ í¬í•¨)
         foreach (var w in targets)
         {
             if (w == null) continue;
-            // ¾Æ·¡ WalkerAI¿¡ Ãß°¡ÇÑ ¿À¹ö¶óÀÌµå Áö¿ø API È£Ãâ
+            // ì•„ë˜ WalkerAIì— ì¶”ê°€í•œ ì˜¤ë²„ë¼ì´ë“œ ì§€ì› API í˜¸ì¶œ
             w.ForceEnterRageAndChase(player.transform, snapImmediate: true, overrideSeconds: overrideChaseSeconds);
         }
     }

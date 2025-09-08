@@ -20,6 +20,10 @@ public class HingedBoxInteraction : MonoBehaviour, ITryInteractable
     [SerializeField] private AudioClip openClip;
     [SerializeField] private AudioClip closeClip;
 
+    [Header("Lock Settings")]
+    [SerializeField] public bool isLocked = false;     // ✅ 잠금 여부
+    [SerializeField] private AudioClip lockedClip;      // (선택) 잠김 안내음
+
     private bool isOpen = false;
     private bool isAnimating = false;
     private Coroutine lightCo;
@@ -57,6 +61,12 @@ public class HingedBoxInteraction : MonoBehaviour, ITryInteractable
     private void Toggle()
     {
         if (isAnimating) return;
+
+          if (isLocked)
+        {
+            if (audioSource && lockedClip) audioSource.PlayOneShot(lockedClip);
+            return;
+        }
 
         float from = isOpen ? openAngle : closedAngle;
         float to = isOpen ? closedAngle : openAngle;

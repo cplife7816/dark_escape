@@ -137,7 +137,8 @@ public class FirstPersonController : MonoBehaviour
     [SerializeField] private Sprite doorIcon;
     [SerializeField] private Sprite itemIcon;
     [SerializeField] private Sprite playIcon;
-    [SerializeField] private Sprite lockIcon;
+    [SerializeField] private Sprite lockIcon; 
+    [SerializeField] private Sprite cardIcon;
     [SerializeField] private Sprite defaultIcon;
 
 
@@ -488,6 +489,24 @@ void Awake()
                 }
             }
 
+            if (target.CompareTag("Card"))
+            {
+                var socket = target.GetComponentInParent<IItemSocket>();
+
+                if (isHoldingItem && heldObject != null && socket != null)
+                {
+                    // 이름 일치 여부는 소켓의 CanInteract가 판단
+                    if (socket.CanInteract(heldObject))
+                    {
+                        bool shouldDrop = socket.TryInteract(heldObject);
+                        if (shouldDrop) DropItem();
+                    }
+                }
+
+                // Card를 보고 있을 땐 줍기/드롭 같은 다른 처리로 빠지지 않도록 고정
+                interactionHandled = true;
+            }
+
             // ✅ 2. 아이템이 없을 때만 TryInteractable 호출
             if (!interactionHandled && !isHoldingItem && target.CompareTag("Interact"))
             {
@@ -703,6 +722,27 @@ void Awake()
                     newIcon = window.isLocked ? lockIcon : doorIcon;
                 }
             }
+            else if (hit.collider.TryGetComponent(out HingedBoxInteraction box))
+            {
+                newIcon = box.isLocked ? lockIcon : itemIcon; // 박스 전용 아이콘이 있으면 교체
+            }
+            else if (tag == "Card")
+            {
+                // 기본은 표시 안 함(흰 점)
+                newIcon = defaultIcon;
+
+                // 카드를 들고 있고, 이름이 일치할 때만 아이콘 표시
+                if (heldObject != null)
+                {
+                    var socket = hit.collider.GetComponentInParent<IItemSocket>();
+                    if (socket != null && socket.CanInteract(heldObject))
+                    {
+                        // 임시로 itemIcon 사용 (나중에 카드 전용 이모티콘으로 바꿔도 됨)
+                        newIcon = cardIcon;
+                    }
+                }
+            }
+
             else if (tag == "Interact" && heldObject != null)
             {
                 var socket = hit.collider.GetComponentInParent<IItemSocket>();
