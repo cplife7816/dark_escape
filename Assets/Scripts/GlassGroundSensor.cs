@@ -11,7 +11,7 @@ public class GlassGroundSensor : MonoBehaviour
 
     private void OnTriggerEnter(Collider other)
     {
-        if (other.CompareTag("Ground") || other.gameObject.layer == LayerMask.NameToLayer("Default"))
+        if (other.CompareTag("FOOTSTEPS/ROCK") || other.gameObject.layer == LayerMask.NameToLayer("Default"))
         {
             controller?.OnGroundSensorTriggered(other);
         }

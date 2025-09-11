@@ -5,6 +5,7 @@ using UnityEngine.UI;
 using TMPro;
 using UnityEngine.Events;
 using LowPolyWater;
+using UnityEngine.SceneManagement;
 
 public class FirstPersonController : MonoBehaviour
 {
@@ -1208,4 +1209,164 @@ void Awake()
         maxLightRange = defaultMaxLightRange;
         Debug.Log($"[FPC] Water OFF → maxLightRange = {maxLightRange}");
     }
+
+    public GameObject HeldObject => heldObject;
+    public Transform HoldPosition => holdPosition;
+
+    public void ForceHold(GameObject item)
+    {
+        // 기존 TryPickupItem 로직과 동일한 상태를 즉시 구성
+        heldObject = item;
+        isHoldingItem = true;
+
+        // 계층/위치
+        item.transform.SetParent(holdPosition, worldPositionStays: false);
+
+        // Collider/Rigidbody 정리
+        if (item.TryGetComponent(out Rigidbody rb))
+        {
+            rb.isKinematic = true;
+            rb.useGravity = false;
+        }
+        if (item.TryGetComponent(out Collider col))
+        {
+            col.enabled = false;
+        }
+
+        // 레이어
+        item.layer = LayerMask.NameToLayer("IgnorePlayerRay");
+
+        // PickupOverride가 있으면 정렬/스케일 적용
+        if (item.TryGetComponent(out PickupOverride po))
+        {
+            holdPosition.localPosition = Vector3.zero + po.holdOffset;
+            item.transform.localRotation = Quaternion.Euler(po.customEulerRotation);
+            po.ApplyHeldScale();
+        }
+        else
+        {
+            holdPosition.localPosition = new Vector3(0f, 0f, 1.2f);
+            item.transform.localRotation = Quaternion.identity;
+        }
+    }
+
+    public void ForceRelease()
+    {
+        if (heldObject == null) return;
+
+        // 부모 해제
+        heldObject.transform.SetParent(null);
+
+        // 물리/충돌 복구
+        if (heldObject.TryGetComponent(out Rigidbody rb))
+        {
+            rb.isKinematic = false;
+            rb.useGravity = true;
+        }
+        if (heldObject.TryGetComponent(out Collider col))
+        {
+            col.enabled = true;
+        }
+
+        heldObject.layer = LayerMask.NameToLayer("Default");
+        heldObject = null;
+        isHoldingItem = false;
+        holdPosition.localPosition = new Vector3(0f, 0f, 1.2f);
+    }
+
+    // FirstPersonController.cs 내부(클래스 안 아무 곳)
+    #region GameOver → _Last 복귀(공용)
+
+    [SerializeField] private string lastSlotKey = "_Last";
+    [SerializeField] private float defaultReturnDelay = 1.0f;
+    [SerializeField] private bool sceneReloadFallback = true; // 세이브 없으면 현재 씬 리로드
+    private bool _returnedOnce = false;
+
+    public void TriggerGameOverReturn(float delaySeconds = -1f)
+    {
+        if (_returnedOnce)
+        {
+            Debug.Log("[FPC] TriggerGameOverReturn → BLOCKED (_returnedOnce=true)");
+            return;
+        }
+        _returnedOnce = true;
+        if (delaySeconds < 0f) delaySeconds = defaultReturnDelay;
+        Debug.Log($"[FPC1] TriggerGameOverReturn → scheduled in {delaySeconds:F2}s");
+        StartCoroutine(Co_ReturnToLastAfterDelay(delaySeconds));
+    }
+
+    private System.Collections.IEnumerator Co_ReturnToLastAfterDelay(float delay)
+    {
+        Debug.Log($"[FPC] Co_ReturnToLastAfterDelay waiting {delay:F2}s…");
+        yield return new WaitForSeconds(Mathf.Max(0f, delay));
+        TryReturnToLastCheckpoint();
+    }
+
+    private void TryReturnToLastCheckpoint()
+    {
+        bool has = SaveSystem.CheckpointStore.Has(lastSlotKey);
+        Debug.Log($"[FPC1] TryReturnToLastCheckpoint('{lastSlotKey}') has={has}");
+        if (has)
+        {
+            Debug.Log($"[FPC1] → SaveSystem.LoadCheckpoint('{lastSlotKey}')");
+            SaveSystem.Instance.LoadCheckpoint(lastSlotKey);
+            return;
+        }
+
+        Debug.LogWarning($"[FPC] Slot '{lastSlotKey}' missing. sceneReloadFallback={sceneReloadFallback}");
+        if (sceneReloadFallback)
+        {
+            var scene = UnityEngine.SceneManagement.SceneManager.GetActiveScene();
+            UnityEngine.SceneManagement.SceneManager.LoadScene(scene.buildIndex);
+        }
+    }
+
+    public void SetCanMove(bool value)
+    {
+        CanMove = value;
+    }
+
+    private void OnEnable() { SaveSystem.AfterLoad += OnAfterLoad_ResetGameOverGuard; }
+    private void OnDisable() { SaveSystem.AfterLoad -= OnAfterLoad_ResetGameOverGuard; }
+
+    private void OnAfterLoad_ResetGameOverGuard()
+    {
+        Debug.Log($"[FPC] AfterLoad → reset guards. (prev _returnedOnce={_returnedOnce})");
+        _returnedOnce = false;
+
+        // 🚑 추가 리셋
+        IsGameOver = false;
+        SetCanMove(true);   // 이 메서드가 없다면 내부 bool 직접 true
+        Debug.Log("[FPC] AfterLoad → IsGameOver=false, CanMove=true");
+
+        enabled = true;
+        var cc = GetComponent<CharacterController>();
+        if (cc) { cc.enabled = true; }
+
+        if (pointLight != null)
+        {
+            if (lightCoroutine != null) { StopCoroutine(lightCoroutine); lightCoroutine = null; }
+            pointLight.color = defaultLightColor;  // 기본 흰색
+            pointLight.range = 0f;                 // 다음 발걸음부터 다시 펄스
+            pointLight.intensity = 0f;
+        }
+
+        // 유리병 효과 코루틴들 중단(실행 중이었다면)
+        if (redCoroutine != null) { StopCoroutine(redCoroutine); redCoroutine = null; }
+        if (blueCoroutine != null) { StopCoroutine(blueCoroutine); blueCoroutine = null; }
+        if (greenCoroutine != null) { StopCoroutine(greenCoroutine); greenCoroutine = null; }
+        if (yellowCoroutine != null) { StopCoroutine(yellowCoroutine); yellowCoroutine = null; }
+        if (pinkCoroutine != null) { StopCoroutine(pinkCoroutine); pinkCoroutine = null; }
+
+        // 분홍 락 해제(락이면 PulseLightEffect가 바로 리턴함)
+        isLightLocked = false;
+
+        // 범위 계수 원복(노랑/파랑 잔여 대비)
+        maxLightRange = defaultMaxLightRange;
+
+        // 보정치/타이머 초기화(안전)
+        extraRange = 0f;
+    }
+
+    #endregion
 }

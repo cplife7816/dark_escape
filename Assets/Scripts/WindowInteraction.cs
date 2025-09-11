@@ -132,4 +132,30 @@ public class WindowInteraction : MonoBehaviour
         pointLight.intensity = 0f;
     }
 
+    // WindowInteraction.cs 내부 — 파일 하단에 public 메서드 추가
+    public bool GetLocked() => isLocked;
+    public void SetLocked(bool v) { isLocked = v; }
+
+    // 0=완전 닫힘(closedRot), 1=완전 열림(openRot)
+    public float GetOpenRatio()
+    {
+        float total = Quaternion.Angle(closedRot, openRot);
+        if (total <= 0.0001f) return 0f;
+
+        float fromClosed = Quaternion.Angle(closedRot, hingeTarget.rotation);
+        float t = Mathf.Clamp01(fromClosed / total);
+        return t;
+    }
+
+    public void SetOpenRatioImmediate(float t01)
+    {
+        t01 = Mathf.Clamp01(t01);
+        hingeTarget.rotation = Quaternion.Slerp(closedRot, openRot, t01);
+
+        // Toggle 시 점프 방지: 내부 isOpen 추정치 동기화
+        bool nowOpen = t01 > 0.5f;
+        var field = typeof(WindowInteraction).GetField("isOpen", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        if (field != null) field.SetValue(this, nowOpen);
+    }
+
 }

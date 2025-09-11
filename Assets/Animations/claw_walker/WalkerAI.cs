@@ -103,6 +103,14 @@ public class WalkerAI : MonoBehaviour
 
     private Coroutine screamFadeCo;
 
+    [SerializeField] private Transform spawnAnchor;   // 선택: 지정 시 여기로 복귀
+    [SerializeField] private bool useNearestWaypointAsSpawn = true; // 앵커 없으면 웨이포인트 근처 선택
+    private Vector3 _initialSpawnPos;
+    private Quaternion _initialSpawnRot;
+    [SerializeField] private string idleStateName = "Idle";         // 안전용(없어도 동작)
+    [SerializeField] private string walkStateName = "Walk";         // 안전용(없어도 동작)
+
+
 
     // 내부 상태
     private Coroutine lightColorCo;
@@ -166,6 +174,27 @@ public class WalkerAI : MonoBehaviour
             if (screamClip != null && screamSource.clip == null)
                 screamSource.clip = screamClip;
         }
+
+        if (spawnAnchor != null)
+        {
+            _initialSpawnPos = spawnAnchor.position;
+            _initialSpawnRot = spawnAnchor.rotation;
+        }
+        else
+        {
+            _initialSpawnPos = transform.position;
+            _initialSpawnRot = transform.rotation;
+        }
+    }
+
+    private void OnEnable()
+    {
+        SaveSystem.AfterLoad += OnAfterLoad_ResetWalker;
+    }
+
+    private void OnDisable()
+    {
+        SaveSystem.AfterLoad -= OnAfterLoad_ResetWalker;
     }
 
     private void Start()
@@ -867,6 +896,303 @@ public class WalkerAI : MonoBehaviour
     }
 
 
+    /// <summary>
+    /// 체크포인트 로드 직후 Walker를 안전한 순찰상태로 초기화한다.
+    /// - killzone에 갇힘 방지
+    /// - NavMeshAgent 경로/속도/버퍼 초기화
+    /// - Rage/사운드/라이트 정리
+    /// - 가장 가까운 웨이포인트로 이동 재개
+    /// </summary>
+    /// 
+    [SerializeField] private bool debugFindPlayerLogs = true;
 
+    // 안전 로그 유틸
+    private void LogDbg(string msg)
+    {
+        if (debugFindPlayerLogs) Debug.Log($"[WalkerAI:{name}] {msg}");
+    }
+    private void WarnDbg(string msg)
+    {
+        if (debugFindPlayerLogs) Debug.LogWarning($"[WalkerAI:{name}] {msg}");
+    }
+    private void OnAfterLoad_ResetWalker()
+    {
 
+        if (player == null)
+        {
+            var fpc = FindObjectOfType<FirstPersonController>();
+            if (fpc != null)
+            {
+                player = fpc;
+                playerT = fpc.transform;
+                prevPlayerPos = playerT.position;
+                Debug.Log("[WalkerAI] AfterLoad → 플레이어 참조 재획득 완료: " + fpc.name);
+            }
+            else
+            {
+                Debug.LogWarning("[WalkerAI] AfterLoad → 플레이어를 찾지 못했습니다.");
+            }
+        }
+        // ── B) 라이트/오디오 mute 해제 (킬캠에서 꺼놨을 수 있음)
+        RestoreLightsSafe();
+        ForcePatrolVisualsOnLoad();
+        // ── C) NavMeshAgent 완전 리셋 + 안전 워프
+        if (agent != null)
+        {
+            agent.isStopped = true;
+            agent.ResetPath();
+            agent.velocity = Vector3.zero;
+
+            Vector3 targetPos = _initialSpawnPos;
+            Quaternion targetRot = _initialSpawnRot;
+
+            if (useNearestWaypointAsSpawn && waypoints != null && waypoints.Length > 0)
+            {
+                int nearest = -1; float best = float.MaxValue;
+                for (int i = 0; i < waypoints.Length; i++)
+                {
+                    var t = waypoints[i]; if (!t) continue;
+                    float d = (t.position - transform.position).sqrMagnitude;
+                    if (d < best) { best = d; nearest = i; }
+                }
+                if (nearest >= 0)
+                {
+                    targetPos = waypoints[nearest].position;
+                    var next = waypoints[(nearest + 1) % waypoints.Length];
+                    if (next) targetRot = Quaternion.LookRotation((next.position - targetPos).normalized, Vector3.up);
+                }
+            }
+
+#if UNITY_2021_3_OR_NEWER
+        agent.Warp(targetPos);
+#else
+            transform.position = targetPos;
+            agent.nextPosition = targetPos;
+#endif
+            transform.rotation = targetRot;
+
+            // NavMeshAgent 기본값 복원
+            agent.updatePosition = true;
+            agent.updateRotation = true;
+            agent.isStopped = false;
+        }
+
+        // ── D) 애니메이터 재활성화/재바인드 + 이동 파라미터 세팅
+        EnsureAnimatorAlive();
+
+        // ── E) 즉시 순찰 재개(목표 지정)
+        ResumePatrolFromHere();
+
+        Debug.Log($"[WalkerAI] AfterLoad Reset → pos={transform.position} ; resume patrol/anim/audio");
+        AfterLoad_DebugReacquirePlayer();
+    }
+
+    private void EnsureAnimatorAlive()
+    {
+        if (animator == null) animator = GetComponent<Animator>();
+        if (animator == null) return;
+
+        if (!animator.enabled) animator.enabled = true;
+
+        // 런타임컨트롤러가 날아간 케이스 대비
+        if (animator.runtimeAnimatorController == null)
+        {
+            Debug.LogWarning("[WalkerAI] Animator has no controller after load.");
+            return;
+        }
+
+        // 트리거나 레이어 꼬임 방지
+        animator.Rebind();
+        animator.Update(0f);
+
+        // Speed 파라미터 기반 블렌드라면 0→보행 속도로 세팅
+        if (!string.IsNullOrEmpty(speedParam))
+        {
+            // 에이전트 속도 기준으로 세팅 (없으면 1로 보행 강제)
+            float spd = (agent != null) ? Mathf.Max(0.5f, agent.speed) : 1f;
+            animator.SetFloat(speedParam, spd, 0.05f, 0f);
+        }
+
+        // 상태 이름이 있는 경우 안전하게 크로스페이드 시도(없어도 에러 안나도록 try)
+        try
+        {
+            if (!string.IsNullOrEmpty(walkStateName))
+            {
+                animator.CrossFadeInFixedTime(walkStateName, 0.1f);
+            }
+        }
+        catch { /* 애니메이터에 해당 스테이트 없으면 무시 */ }
+    }
+
+    private void ResumePatrolFromHere()
+    {
+        // 웨이포인트 시스템에 맞춰 목적지 재설정
+        if (agent == null) return;
+
+        Transform target = GetNextWaypointFromCurrentPosition();
+        if (target != null)
+        {
+            agent.ResetPath();
+            agent.isStopped = false;
+            agent.SetDestination(target.position);
+        }
+
+        // 애니메이션 파라미터도 한번 더 보행 쪽으로 보정
+        if (!string.IsNullOrEmpty(speedParam) && animator != null)
+        {
+            float spd = Mathf.Max(0.5f, agent.speed);
+            animator.SetFloat(speedParam, spd, 0.05f, 0f);
+        }
+    }
+
+    private Transform GetNextWaypointFromCurrentPosition()
+    {
+        if (waypoints == null || waypoints.Length == 0) return null;
+
+        // 가장 가까운 웨이포인트를 찾아 그 다음 웨이포인트로 향하게 하면 “순찰 재개” 느낌
+        int nearest = -1; float best = float.MaxValue;
+        for (int i = 0; i < waypoints.Length; i++)
+        {
+            var t = waypoints[i]; if (!t) continue;
+            float d = (t.position - transform.position).sqrMagnitude;
+            if (d < best) { best = d; nearest = i; }
+        }
+
+        if (nearest < 0) return waypoints[0];
+
+        int next = (nearest + 1) % waypoints.Length;
+        return waypoints[next] ? waypoints[next] : waypoints[nearest];
+    }
+
+    private void RestoreLightsSafe()
+    {
+        // 킬캠에서 killcamDisableLights 끈 경우가 있어 복구
+        var lights = GetComponentsInChildren<Light>(true);
+        foreach (var l in lights)
+        {
+            if (!l) continue;
+            // Whisper의 기본 포인트라이트라면 최소 상태로만 되돌림(범위 0, intensity 0)
+            // 필요시 여기서 프로젝트 규칙에 맞는 기본값으로 조정
+            if (l.type == LightType.Point)
+            {
+                l.enabled = true;
+                // 범위/강도는 이동 중 발걸음/상태에 의해 다시 제어
+            }
+        }
+    }
+
+    // 내부 FSM이 있다면 Patrol로 강제(없으면 빈 함수로 둬도 OK)
+    private void ForcePatrolVisualsOnLoad()
+    {
+        // 상태는 이미 Patrol로 돌려놨다고 가정
+        // (만약 아닐 수도 있으면 아래 한 줄을 남겨둡니다)
+        state = WalkerState.Patrol;
+
+        // Rage 사운드 정리, 기본 호흡 재개
+        StopScream();
+        PlayBreathing();
+
+        // Rage에서 고정되어 있던 라이트 즉시 초기화
+        if (pointLight)
+        {
+            if (lightCoroutine != null) StopCoroutine(lightCoroutine);
+            pointLight.color = searchFromColor; // Patrol 기본색으로
+            pointLight.range = 0f;
+            pointLight.intensity = 0f;
+        }
+        if (pointLight2)
+        {
+            if (lightCoroutine2 != null) StopCoroutine(lightCoroutine2);
+            pointLight2.color = searchFromColor;
+            pointLight2.range = 0f;
+            pointLight2.intensity = 0f;
+        }
+
+        // 추격/재평가 타이밍 리셋(감지 재개 보조)
+        nextChaseAllowedTime = 0f;
+        lastFootstepHeardTime = -999f;
+        lastPlayerLightRange = 0f; // 엣지 감지 재시작을 위해 초기화
+    }
+
+    private void AfterLoad_DebugReacquirePlayer()
+    {
+        LogDbg("AfterLoad: begin player reacquire");
+
+        // 활성 오브젝트에서 우선 탐색
+        var activeFpc = FindObjectOfType<FirstPersonController>();
+        // 비활성 포함 전체(씬 밖/비활성 포함)
+        var allFpcs = Resources.FindObjectsOfTypeAll<FirstPersonController>();
+        int allCount = allFpcs != null ? allFpcs.Length : 0;
+
+        LogDbg($"AfterLoad: activeFpc={(activeFpc ? activeFpc.name : "null")}, allFpcs.count={allCount}");
+
+        if (allCount > 0)
+        {
+            for (int i = 0; i < allFpcs.Length; i++)
+            {
+                var f = allFpcs[i];
+                if (!f) continue;
+                var go = f.gameObject;
+                LogDbg($"  - FPC[{i}] name={go.name}, activeInHierarchy={go.activeInHierarchy}, activeSelf={go.activeSelf}, scene={go.scene.name}");
+            }
+        }
+
+        if (activeFpc != null)
+        {
+            player = activeFpc;
+            playerT = player.transform;
+            prevPlayerPos = playerT.position;
+            LogDbg($"AfterLoad: ACTIVE FPC re-acquired → {player.name} (scene={player.gameObject.scene.name})");
+        }
+        else
+        {
+            WarnDbg("AfterLoad: active FPC not found this frame → start scan coroutine");
+            StartCoroutine(Co_DebugScanPlayerAfterLoad());
+        }
+    }
+
+    // ─────────────────────────────────────────────
+    // ② 몇 프레임 동안 주사하며 로그만 찍는 코루틴(동작 변경 없음)
+    // ─────────────────────────────────────────────
+    private IEnumerator Co_DebugScanPlayerAfterLoad()
+    {
+        float t0 = Time.time;
+        const float timeout = 2.0f; // 최대 2초(원하면 줄여도 됨)
+        int attempt = 0;
+
+        while ((player == null || playerT == null) && Time.time - t0 < timeout)
+        {
+            attempt++;
+
+            var activeFpc = FindObjectOfType<FirstPersonController>();
+            var allFpcs = Resources.FindObjectsOfTypeAll<FirstPersonController>();
+            int allCount = allFpcs != null ? allFpcs.Length : 0;
+
+            LogDbg($"[Scan {attempt}] active={(activeFpc ? activeFpc.name : "null")}, allCount={allCount}, t={Time.time - t0:0.00}s");
+
+            if (allCount > 0)
+            {
+                for (int i = 0; i < allFpcs.Length; i++)
+                {
+                    var f = allFpcs[i]; if (!f) continue;
+                    var go = f.gameObject;
+                    LogDbg($"  • FPC[{i}] name={go.name}, activeInHierarchy={go.activeInHierarchy}, activeSelf={go.activeSelf}, scene={go.scene.name}");
+                }
+            }
+
+            if (activeFpc != null)
+            {
+                player = activeFpc;
+                playerT = player.transform;
+                prevPlayerPos = playerT.position;
+                LogDbg($"[Scan {attempt}] SUCCESS: set player={player.name} (scene={player.gameObject.scene.name})");
+                yield break;
+            }
+
+            yield return null; // 다음 프레임 재시도
+        }
+
+        if (player == null || playerT == null)
+            WarnDbg($"FAILED: No active FirstPersonController found within {timeout:0.00}s after load.");
+    }
 }

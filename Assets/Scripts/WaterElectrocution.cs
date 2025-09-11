@@ -1,73 +1,151 @@
-using System.Collections;
+ï»¿using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
 
 [RequireComponent(typeof(Collider))]
 public class WaterElectrocution : MonoBehaviour
 {
-    [Header("Detection (°¨Àü °¨Áö)")]
-    [Tooltip("Ãæµ¹Ã¼°¡ ÀÌ ÅÂ±×¸¦ °¡Áø °æ¿ì ÇÃ·¹ÀÌ¾î·Î °£ÁÖÇÕ´Ï´Ù. ºñ¿öµÎ¸é FirstPersonController Á¸Àç ¿©ºÎ·Îµµ ÆÇº°ÇÕ´Ï´Ù.")]
+    [Header("Detection (ê°ì „ ê°ì§€)")]
+    [Tooltip("ì¶©ëŒì²´ê°€ ì´ íƒœê·¸ë¥¼ ê°€ì§„ ê²½ìš° í”Œë ˆì´ì–´ë¡œ ê°„ì£¼í•©ë‹ˆë‹¤. ë¹„ì›Œë‘ë©´ FirstPersonController ì¡´ì¬ ì—¬ë¶€ë¡œë„ íŒë³„í•©ë‹ˆë‹¤.")]
     [SerializeField] private string playerTag = "Player";
 
-    [Tooltip("°¨Àü ÁßÀÎ µ¿¾È ÀçÀÔÀåÀ» ¸·½À´Ï´Ù. false¸é ½ÃÄö½º Á¾·á Àü¿¡µµ ´Ù½Ã Æ®¸®°ÅµÉ ¼ö ÀÖ½À´Ï´Ù.")]
+    [Tooltip("ê°ì „ ì¤‘ì¸ ë™ì•ˆ ì¬ì…ì¥ì„ ë§‰ìŠµë‹ˆë‹¤. falseë©´ ì‹œí€€ìŠ¤ ì¢…ë£Œ ì „ì—ë„ ë‹¤ì‹œ íŠ¸ë¦¬ê±°ë  ìˆ˜ ìˆìŠµë‹ˆë‹¤.")]
     [SerializeField] private bool blockReentryUntilReset = true;
 
-    [Tooltip("¿ÜºÎ ½ºÀ§Ä¡/´©¼ö µîÀ¸·Î ¹°ÀÌ Àüµµ »óÅÂÀÎÁö ¿©ºÎ¸¦ Á¦¾îÇÕ´Ï´Ù.")]
+    [Tooltip("ì™¸ë¶€ ìŠ¤ìœ„ì¹˜/ëˆ„ìˆ˜ ë“±ìœ¼ë¡œ ë¬¼ì´ ì „ë„ ìƒíƒœì¸ì§€ ì—¬ë¶€ë¥¼ ì œì–´í•©ë‹ˆë‹¤.")]
     [SerializeField] private bool isElected = false;
 
-    [Header("Electrocution SFX (¼ø°£ È¿°úÀ½)")]
-    [SerializeField] private AudioSource sfxSource;      // ºñ¿öµÎ¸é °°Àº ¿ÀºêÁ§Æ®ÀÇ AudioSource¸¦ ÀÚµ¿ Å½»ö
-    [SerializeField] private AudioClip electrocuteClip;  // ¹øÂ½- È¿°úÀ½(Ä«¸Ş¶ó ¸ğ¼Ç°ú µ¿½Ã Àç»ı)
+    [Header("Electrocution SFX (ìˆœê°„ íš¨ê³¼ìŒ)")]
+    [SerializeField] private AudioSource sfxSource;      // ë¹„ì›Œë‘ë©´ ê°™ì€ ì˜¤ë¸Œì íŠ¸ì˜ AudioSourceë¥¼ ìë™ íƒìƒ‰
+    [SerializeField] private AudioClip electrocuteClip;  // ë²ˆì©- íš¨ê³¼ìŒ(ì¹´ë©”ë¼ ëª¨ì…˜ê³¼ ë™ì‹œ ì¬ìƒ)
     [SerializeField, Range(0f, 1f)] private float electrocuteVolume = 1f;
 
-    [Header("Walker-Style Tint (È­¸é ¿À¹ö·¹ÀÌ)")]
-    [SerializeField] private CanvasGroup overlayGroup;   // ÀüÃ¼ È­¸é CanvasGroup
-    [SerializeField] private Image overlayImage;         // Ç®½ºÅ©¸° Image
-    [SerializeField] private Color overlayColor = new Color(0.6f, 0.8f, 1f, 1f); // Àü±â ´À³¦(Çª¸¥ºû)
+    [Header("Walker-Style Tint (í™”ë©´ ì˜¤ë²„ë ˆì´)")]
+    [SerializeField] private CanvasGroup overlayGroup;   // ì „ì²´ í™”ë©´ CanvasGroup
+    [SerializeField] private Image overlayImage;         // í’€ìŠ¤í¬ë¦° Image
+    [SerializeField] private Color overlayColor = new Color(0.6f, 0.8f, 1f, 1f); // ì „ê¸° ëŠë‚Œ(í‘¸ë¥¸ë¹›)
     [SerializeField] private float overlayFadeSeconds = 0.5f;
 
-    [Header("Tint SFX (Walker ¹æ½Ä°ú µ¿ÀÏ ÄÁ¼Á)")]
-    [SerializeField] private AudioSource tintAudioSource; // Tint Àü¿ë ¿Àµğ¿À ¼Ò½º(±ÇÀå: º°µµ)
-    [SerializeField] private AudioClip tintStartClip;     // Tint ½ÃÀÛ ¿ø¼¦
-    [SerializeField] private AudioClip tintLoopClip;      // Tint À¯Áö ·çÇÁ(¼±ÅÃ)
+    [Header("Tint SFX (Walker ë°©ì‹ê³¼ ë™ì¼ ì»¨ì…‰)")]
+    [SerializeField] private AudioSource tintAudioSource; // Tint ì „ìš© ì˜¤ë””ì˜¤ ì†ŒìŠ¤(ê¶Œì¥: ë³„ë„)
+    [SerializeField] private AudioClip tintStartClip;     // Tint ì‹œì‘ ì›ìƒ·
+    [SerializeField] private AudioClip tintLoopClip;      // Tint ìœ ì§€ ë£¨í”„(ì„ íƒ)
     [SerializeField, Range(0f, 1f)] private float tintVolume = 1f;
     [SerializeField] private bool fadeOutTintAfter = true;
     [SerializeField] private float tintFadeOutSeconds = 0.4f;
 
-    [Header("Camera FX (Æ¿Æ® + Y ÇÏ°­)")]
-    [SerializeField] private float cameraTiltAngle = 90f;        // ZÃà ¸ñÇ¥ È¸Àü
-    [SerializeField] private float tiltDuration = 1.5f;          // ÀüÃ¼ ¼Ò¿ä ½Ã°£
+    [Header("Camera FX (í‹¸íŠ¸ + Y í•˜ê°•)")]
+    [SerializeField] private float cameraTiltAngle = 90f;        // Zì¶• ëª©í‘œ íšŒì „
+    [SerializeField] private float tiltDuration = 1.5f;          // ì „ì²´ ì†Œìš” ì‹œê°„
     [SerializeField] private AnimationCurve tiltCurve = AnimationCurve.EaseInOut(0, 0, 1, 1);
-    [Tooltip("°¨Àü ¿¬Ãâ µ¿¾È Ä«¸Ş¶óÀÇ localPosition.y¸¦ 0À¸·Î ¼­¼­È÷ º¸Á¤ÇÕ´Ï´Ù.")]
-    [SerializeField] private bool adjustCameraY = true;     // Ä«¸Ş¶ó Y º¸Á¤ »ç¿ë ¿©ºÎ
-    [SerializeField] private float targetCameraLocalY = -2f; // ÇÃ·¹ÀÌ¾î Áß½É ±âÁØ, ¸ñÇ¥ local Y (¿¹: -2)
+    [Tooltip("ê°ì „ ì—°ì¶œ ë™ì•ˆ ì¹´ë©”ë¼ì˜ localPosition.yë¥¼ 0ìœ¼ë¡œ ì„œì„œíˆ ë³´ì •í•©ë‹ˆë‹¤.")]
+    [SerializeField] private bool adjustCameraY = true;     // ì¹´ë©”ë¼ Y ë³´ì • ì‚¬ìš© ì—¬ë¶€
+    [SerializeField] private float targetCameraLocalY = -2f; // í”Œë ˆì´ì–´ ì¤‘ì‹¬ ê¸°ì¤€, ëª©í‘œ local Y (ì˜ˆ: -2)
 
-    // ³»ºÎ »óÅÂ
+    [Header("Camera / Head (ê°ì „ ì¤‘ í”ë“œëŠ” ëŒ€ìƒ)")]
+    [SerializeField] private Transform headOrCamera;   // ê°ì „ ì¤‘ ê±´ë“œë¦¬ëŠ” ì¹´ë©”ë¼/í—¤ë“œ Transform (ê¸°ì¡´ì— ì“°ë˜ ëŒ€ìƒ ì—°ê²°)
+    private Vector3 _camDefaultLocalPos;
+    private Quaternion _camDefaultLocalRot;
+
+    [Header("Trigger / Collider (ì˜µì…˜)")]
+    [SerializeField] private Collider electrocutionTrigger; // ê°ì „ íŒì • ì½œë¼ì´ë”(ìˆìœ¼ë©´ ë³µêµ¬)
+    private int _triggerDefaultLayer;
+    private bool _triggerDefaultEnabled;
+
+
+
+    // ë‚´ë¶€ ìƒíƒœ
     private bool hasTriggered = false;
 
-    /// <summary>¿ÜºÎ Àü±â ½ºÀ§Ä¡ µî¿¡¼­ È£Ãâ</summary>
+    /// <summary>ì™¸ë¶€ ì „ê¸° ìŠ¤ìœ„ì¹˜ ë“±ì—ì„œ í˜¸ì¶œ</summary>
     public void SetElected(bool value) => isElected = value;
 
-    private void Reset()
+    private void Awake()
     {
-        // °¨Àü ¿µ¿ªÀº Æ®¸®°Å Äİ¶óÀÌ´õ ±ÇÀå
-        var col = GetComponent<Collider>();
-        if (col) col.isTrigger = true;
+        if (headOrCamera)
+        {
+            _camDefaultLocalPos = headOrCamera.localPosition;
+            _camDefaultLocalRot = headOrCamera.localRotation;
+        }
+        if (electrocutionTrigger)
+        {
+            _triggerDefaultLayer = electrocutionTrigger.gameObject.layer;
+            _triggerDefaultEnabled = electrocutionTrigger.enabled;
+        }
+    }
 
-        // °°Àº ¿ÀºêÁ§Æ®ÀÇ AudioSource ÀÚµ¿ ¿¬°á
-        if (!sfxSource) sfxSource = GetComponent<AudioSource>();
+    // ------------------------
+    // 1) SaveSystem.AfterLoad êµ¬ë…/í•´ì œ
+    // ------------------------
+    private void OnEnable()
+    {
+        Debug.Log("[ELEC] OnEnable");
+        SaveSystem.AfterLoad += OnAfterLoad;
+    }
+    private void OnDisable()
+    {
+        Debug.Log("[ELEC] OnDisable");
+        SaveSystem.AfterLoad -= OnAfterLoad;
+    }
 
-        // ¿À¹ö·¹ÀÌ ºñÈ°¼º ½ÃÀÛ
-        if (overlayGroup) overlayGroup.gameObject.SetActive(false);
+    private void OnAfterLoad()
+    {
+        Debug.Log("[ELEC] AfterLoad â†’ ResetAfterLoad()");
+        ResetAfterLoad();
+    }
+
+    public void ResetAfterLoad()
+    {
+        Debug.Log("[ELEC] ResetAfterLoad: stop coroutines + reset flags/UI/audio/camera/trigger");
+        StopAllCoroutines();
+        hasTriggered = false;
+
+        if (overlayGroup)
+        {
+            overlayGroup.alpha = 0f;
+            overlayGroup.interactable = false;
+            overlayGroup.blocksRaycasts = false;
+            overlayGroup.gameObject.SetActive(false);
+        }
+        if (overlayImage) overlayImage.enabled = false;
+
+        if (tintAudioSource) tintAudioSource.Stop();
+        if (sfxSource) sfxSource.Stop();
+
+        if (headOrCamera)
+        {
+            headOrCamera.localPosition = _camDefaultLocalPos;
+            headOrCamera.localRotation = _camDefaultLocalRot;
+        }
+
+        var fpc = FindObjectOfType<FirstPersonController>();
+        if (fpc)
+        {
+            Debug.Log($"[ELEC] ResetAfterLoad â†’ enable FPC (was {fpc.enabled})");
+            fpc.enabled = true;
+            var cc = fpc.GetComponent<CharacterController>();
+            if (cc) { Debug.Log($"[ELEC] ResetAfterLoad â†’ enable CC (was {cc.enabled})"); cc.enabled = true; }
+        }
+
+        if (electrocutionTrigger)
+        {
+            electrocutionTrigger.enabled = _triggerDefaultEnabled;
+            electrocutionTrigger.gameObject.layer = _triggerDefaultLayer;
+            Debug.Log($"[ELEC] ResetAfterLoad â†’ trigger enabled={electrocutionTrigger.enabled}, layer={electrocutionTrigger.gameObject.layer}");
+        }
+
+        Debug.Log($"[ELEC] ResetAfterLoad DONE. isElected={isElected}, hasTriggered={hasTriggered}");
     }
 
     private void OnTriggerEnter(Collider other)
     {
+        Debug.Log($"[ELEC1] OnTriggerEnter: isElected={isElected}, hasTriggered={hasTriggered}, blockReentry={blockReentryUntilReset}");
         if (!isElected) return;
         if (blockReentryUntilReset && hasTriggered) return;
         if (!IsPlayer(other)) return;
 
         hasTriggered = true;
+        Debug.Log("[ELEC] â†’ Start ElectrocuteSequence (Enter)");
         var fpc = other.GetComponentInParent<FirstPersonController>();
         StartCoroutine(ElectrocuteSequence(fpc));
     }
@@ -79,9 +157,24 @@ public class WaterElectrocution : MonoBehaviour
         if (!IsPlayer(other)) return;
 
         hasTriggered = true;
+        Debug.Log("[ELEC] â†’ Start ElectrocuteSequence (Stay)");
         var fpc = other.GetComponentInParent<FirstPersonController>();
         StartCoroutine(ElectrocuteSequence(fpc));
     }
+
+    private void Reset()
+    {
+        // ê°ì „ ì˜ì—­ì€ íŠ¸ë¦¬ê±° ì½œë¼ì´ë” ê¶Œì¥
+        var col = GetComponent<Collider>();
+        if (col) col.isTrigger = true;
+
+        // ê°™ì€ ì˜¤ë¸Œì íŠ¸ì˜ AudioSource ìë™ ì—°ê²°
+        if (!sfxSource) sfxSource = GetComponent<AudioSource>();
+
+        // ì˜¤ë²„ë ˆì´ ë¹„í™œì„± ì‹œì‘
+        if (overlayGroup) overlayGroup.gameObject.SetActive(false);
+    }
+
 
     private bool IsPlayer(Collider other)
     {
@@ -91,7 +184,8 @@ public class WaterElectrocution : MonoBehaviour
 
     private IEnumerator ElectrocuteSequence(FirstPersonController player)
     {
-        // 0) ÀÌµ¿/ÀÔ·Â Á¤Áö: CanMove´Â ¿ÜºÎ set ºÒ°¡ ¡æ ÄÄÆ÷³ÍÆ® ºñÈ°¼ºÈ­·Î ¾ÈÀü Â÷´Ü
+        Debug.Log("[ELEC1] ElectrocuteSequence START");
+        // 0) ì´ë™/ì…ë ¥ ì •ì§€: CanMoveëŠ” ì™¸ë¶€ set ë¶ˆê°€ â†’ ì»´í¬ë„ŒíŠ¸ ë¹„í™œì„±í™”ë¡œ ì•ˆì „ ì°¨ë‹¨
         CharacterController cc = null;
         bool prevFpcEnabled = false, prevCcEnabled = false;
 
@@ -104,7 +198,7 @@ public class WaterElectrocution : MonoBehaviour
         }
 
         // ------------------------------
-        // 1) Ä«¸Ş¶ó ¸ğ¼Ç(Æ¿Æ® + Y ÇÏ°­) + "¼ø°£ È¿°úÀ½" µ¿½Ã¿¡
+        // 1) ì¹´ë©”ë¼ ëª¨ì…˜(í‹¸íŠ¸ + Y í•˜ê°•) + "ìˆœê°„ íš¨ê³¼ìŒ" ë™ì‹œì—
         // ------------------------------
         var src = sfxSource ? sfxSource : GetComponent<AudioSource>();
         if (src && electrocuteClip)
@@ -131,10 +225,10 @@ public class WaterElectrocution : MonoBehaviour
                     t += Time.deltaTime / dur;
                     float k = tiltCurve != null ? tiltCurve.Evaluate(t) : t;
 
-                    // È¸Àü º¸°£
+                    // íšŒì „ ë³´ê°„
                     cam.transform.localRotation = Quaternion.Slerp(startRot, targetRot, k);
 
-                    // À§Ä¡ º¸°£(Y¡æ0)
+                    // ìœ„ì¹˜ ë³´ê°„(Yâ†’0)
                     if (adjustCameraY)
                         cam.transform.localPosition = Vector3.Lerp(startLocalPos, targetLocalPos, k);
 
@@ -147,14 +241,17 @@ public class WaterElectrocution : MonoBehaviour
         }
 
         // ------------------------------
-        // 2) Tint(¿À¹ö·¹ÀÌ) + Tint SFX
+        // 2) Tint(ì˜¤ë²„ë ˆì´) + Tint SFX
         // ------------------------------
+        // WaterElectrocution.cs (ElectrocuteSequence ë‚´ë¶€)
         if (overlayGroup)
         {
             overlayGroup.gameObject.SetActive(true);
-            if (overlayImage) overlayImage.color = overlayColor;
+            if (overlayImage) { overlayImage.enabled = true; overlayImage.color = overlayColor; }
+            Debug.Log($"[ELEC1] Tint ON (enabled={overlayImage?.enabled})");
             yield return StartCoroutine(FadeOverlay(overlayGroup, 1f, overlayFadeSeconds));
         }
+
 
         if (tintAudioSource)
         {
@@ -169,14 +266,44 @@ public class WaterElectrocution : MonoBehaviour
             }
         }
 
-        // (¼±ÅÃ) °ÔÀÓ¿À¹ö °íÁ¤ ¿¬ÃâÀÌ¸é ºñÈ°¼º À¯Áö,
-        // È¸»ı °¡´É ¼³°è¸é ¾Æ·¡ º¹±¸ »ç¿ë:
+        // (ì„ íƒ) ê²Œì„ì˜¤ë²„ ê³ ì • ì—°ì¶œì´ë©´ ë¹„í™œì„± ìœ ì§€,
+        // íšŒìƒ ê°€ëŠ¥ ì„¤ê³„ë©´ ì•„ë˜ ë³µêµ¬ ì‚¬ìš©:
         // if (player) { player.enabled = prevFpcEnabled; if (cc) cc.enabled = prevCcEnabled; }
 
         if (fadeOutTintAfter && tintAudioSource && tintAudioSource.isPlaying)
             yield return StartCoroutine(FadeOutAndStop(tintAudioSource, tintFadeOutSeconds));
 
         if (!blockReentryUntilReset) hasTriggered = false;
+
+        if (player != null)
+        {
+            Debug.Log("[ELEC1] ElectrocuteSequence END â†’ ReturnToLastViaSaveSystem(0.5)");
+            StartCoroutine(ReturnToLastViaSaveSystem(0.5f));
+        }
+        else
+        {
+            Debug.LogWarning("[ELEC] ElectrocuteSequence END but player=null");
+        }
+    }
+
+    private IEnumerator ReturnToLastViaSaveSystem(float delay)
+    {
+        yield return new WaitForSeconds(Mathf.Max(0f, delay));
+
+        // ì²´í¬í¬ì¸íŠ¸ ìœ ë¬´ ë¡œê·¸(ì„ íƒ)
+        bool has = SaveSystem.CheckpointStore.Has("_Last"); // ë©”ëª¨ë¦¬ ìŠ¬ë¡¯ í™•ì¸
+        Debug.Log($"[ELEC1] ReturnToLastViaSaveSystem â†’ hasLast={has}");
+
+        // ìˆìœ¼ë©´ ë¡œë“œ, ì—†ìœ¼ë©´(ì˜µì…˜) í˜„ì¬ ì”¬ ë¦¬ë¡œë“œ ë“± ì²˜ë¦¬ ê°€ëŠ¥
+        if (has && SaveSystem.Instance != null)
+        {
+            SaveSystem.Instance.LoadCheckpoint("_Last");
+        }
+        else
+        {
+            Debug.LogWarning("[ELEC] _Last slot missing or SaveSystem.Instance null.");
+            // í•„ìš”í•˜ë©´ SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+        }
     }
 
     private IEnumerator FadeOverlay(CanvasGroup group, float target, float seconds)
@@ -209,4 +336,6 @@ public class WaterElectrocution : MonoBehaviour
         src.loop = false;
         src.clip = null;
     }
+
+
 }

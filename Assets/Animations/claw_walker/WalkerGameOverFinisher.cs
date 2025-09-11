@@ -82,11 +82,23 @@ public class WalkerGameOverFinisher : MonoBehaviour, IGameOverFinisher
     [Header("Restore Camera")]
     [SerializeField] private bool restoreCameraAfter = false;
 
-
     public string ReasonId => "CaughtByWalker";
 
     public IEnumerator Play(FirstPersonController player)
     {
+
+        if (gameOverOverlayGroup)
+        {
+            gameOverOverlayGroup.alpha = 0f;
+            gameOverOverlayGroup.gameObject.SetActive(false);
+        }
+        if (gameOverOverlayImage)
+        {
+            gameOverOverlayImage.enabled = true; // ⭐ 항상 켜두기
+                                                 // 필요 시 색도 선반영
+            gameOverOverlayImage.color = new Color(gameOverColor.r, gameOverColor.g, gameOverColor.b, 1f);
+        }
+
         // 0) 플레이어 이동계 잠금
         var cc = player.GetComponent<CharacterController>();
         if (cc) cc.enabled = false;
@@ -224,8 +236,11 @@ public class WalkerGameOverFinisher : MonoBehaviour, IGameOverFinisher
 
         // ★ 10) jumpTime 이후 → gameOverTime 추가 대기 → 오버레이/사운드 실행
         if (gameOverTime > 0f) yield return new WaitForSeconds(gameOverTime);
-        TriggerFinalGameOverOverlayAndSfx();
+        var (usedSrc, usedClip) = TriggerFinalGameOverOverlayAndSfx();
         StartCoroutine(FadeOutPostJumpSafely());
+
+        if (gameOverClipEndSeconds > 0f)
+            yield return new WaitForSeconds(gameOverClipEndSeconds);
 
         // 11) 카메라 복원(원한다면) — 오버레이가 화면을 덮으므로 복원해도 보기에 영향 없음
         if (restoreCameraAfter && cam)
@@ -240,6 +255,15 @@ public class WalkerGameOverFinisher : MonoBehaviour, IGameOverFinisher
         // 11.5) 불빛 원복(옵션)
         if (restoreLightsAfter)
             RestoreKillcamLights();
+
+        // WalkerGameOverFinisher.cs - Play(...) 코루틴 마지막 부분
+        var playerFpc = player; // 이미 인자로 받음
+        if (playerFpc != null)
+        {
+            // 연출 끝나고 0.5초 후 _Last 복귀 (원하면 조절)
+            playerFpc.TriggerGameOverReturn(0.5f);
+        }
+        UnmuteKillcamSources();
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -253,7 +277,7 @@ public class WalkerGameOverFinisher : MonoBehaviour, IGameOverFinisher
             foreach (var src in killcamMuteSources)
             {
                 if (!src) continue;
-                if (sfx && src == sfx) continue;
+                if ((sfx && src == sfx) || (gameOverSfx && src == gameOverSfx)) continue;
                 yield return StartCoroutine(FadeOutAndMute(src, breathingFadeSeconds));
             }
         }
@@ -265,7 +289,7 @@ public class WalkerGameOverFinisher : MonoBehaviour, IGameOverFinisher
             foreach (var a in all)
             {
                 if (!a) continue;
-                if (sfx && a == sfx) continue;
+                if ((sfx && a == sfx) || (gameOverSfx && a == gameOverSfx)) continue;
                 if (!a.loop) continue;
                 coros.Add(StartCoroutine(FadeOutAndMute(a, breathingFadeSeconds)));
             }
@@ -349,11 +373,13 @@ public class WalkerGameOverFinisher : MonoBehaviour, IGameOverFinisher
 
     // ─────────────────────────────────────────────────────────────────────────
     // 최종 게임오버: 화면 대체 + 전용 SFX
-    private void TriggerFinalGameOverOverlayAndSfx()
+    private (AudioSource usedSrc, AudioClip usedClip) TriggerFinalGameOverOverlayAndSfx()
     {
-        // 오버레이
         if (gameOverOverlayGroup)
         {
+            // ⭐ 혹시 모를 외부 끔상태를 재차 방지
+            if (gameOverOverlayImage) gameOverOverlayImage.enabled = true;
+
             gameOverOverlayGroup.gameObject.SetActive(true);
             if (gameOverOverlayImage) gameOverOverlayImage.color = gameOverColor;
             StopCoroutineSafe(_overlayFadeCo);
@@ -361,16 +387,20 @@ public class WalkerGameOverFinisher : MonoBehaviour, IGameOverFinisher
         }
 
         // 전용 사운드
-        var src = gameOverSfx ? gameOverSfx : sfx; // 전용 소스 우선, 없으면 sfx 재사용
+        var src = gameOverSfx ? gameOverSfx : sfx; // 전용 소스 우선, 없으면 sfx
+        AudioClip usedClip = null;
+
         if (src && gameOverClip && !src.mute)
         {
             src.PlayOneShot(gameOverClip, Mathf.Clamp01(gameOverVolume));
+            usedClip = gameOverClip;
 
-            // ★ 추가: N초 뒤 GameOverClip 페이드아웃→정지 예약
+            // (옵션) 강제 종료 스케줄은 그대로 유지
             if (gameOverClipEndSeconds > 0f)
                 StartCoroutine(EndGameOverClipAfterDelay(src, gameOverClipEndSeconds, gameOverClipFadeOutSeconds));
         }
 
+        return (src, usedClip);
     }
 
     private Coroutine _overlayFadeCo;
@@ -420,4 +450,17 @@ public class WalkerGameOverFinisher : MonoBehaviour, IGameOverFinisher
         // 부드럽게 0으로 페이드 후 정지
         yield return StartCoroutine(FadeOutAndStop(src, fadeSeconds));
     }
+
+    private void UnmuteKillcamSources()
+    {
+        var all = GetComponentsInChildren<AudioSource>(true);
+        foreach (var a in all)
+        {
+            if (!a) continue;
+            if (gameOverSfx && a == gameOverSfx) continue; // 게임오버 전용 소스는 제외(원하면 제외 안 해도 OK)
+            if (sfx && a == sfx) continue;                  // 연출 전용 sfx는 제외
+            a.mute = false;                                 // 🔓 핵심: 언뮤트
+        }
+    }
+
 }
