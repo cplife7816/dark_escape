@@ -54,4 +54,10 @@ public class KeyInteractionController : MonoBehaviour, IItemSocket
             audioSource.PlayOneShot(unlockSound);
         }
     }
+
+    public bool CanInteract(GameObject item)
+    {
+        return item != null && item.name == requiredKeyName;
+    }
+
 }
